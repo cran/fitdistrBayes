@@ -1,4 +1,4 @@
-# fitdistrBayes 0.2.0: six new models
+# fitdistrBayes 0.2.2: newer built-in models
 # Run one section at a time. Results are printed in the console only.
 
 library(fitdistrBayes)
@@ -72,6 +72,24 @@ x_rician <- sqrt(rnorm(80, 5, 2)^2 + rnorm(80, 0, 2)^2)
 rician_jeffreys <- fitdistrBayes(x_rician, "rician", "jeffreys", seed = 602)
 list(Jeffreys = rician_jeffreys$summary[, shown])
 
+# Weighted Lindley ------------------------------------------------------------
+set.seed(701)
+lambda_wl <- 2.5
+phi_wl <- 0.8
+first_component <- runif(80) < lambda_wl / (lambda_wl + phi_wl)
+x_wl <- rgamma(80, shape = phi_wl + as.numeric(!first_component),
+               rate = lambda_wl)
+wl_reference_lambda <- fitdistrBayes(
+  x_wl, "weighted lindley", "reference-lambda", seed = 702
+)
+wl_reference_phi <- fitdistrBayes(
+  x_wl, "weighted lindley", "reference-phi", seed = 703
+)
+list(
+  Reference_lambda = wl_reference_lambda$summary[, shown],
+  Reference_phi = wl_reference_phi$summary[, shown]
+)
+
 # Inspect the automatic classical starts used by the samplers.
 gumbel_jeffreys$initialization
 frechet_jeffreys$initialization
@@ -79,6 +97,7 @@ lomax_jeffreys$initialization
 nakagami_jeffreys$initialization
 el_jeffreys$initialization
 rician_jeffreys$initialization
+wl_reference_lambda$initialization
 
 # Standard methods remain available for every fit.
 summary(rician_jeffreys)

@@ -1,3 +1,32 @@
+# fitdistrBayes 0.2.2
+
+- Added the weighted Lindley distribution with Fisher-information Jeffreys,
+  one-group reference, Jeffreys' first-rule, independence-Jeffreys, and exact
+  ordered reference priors for lambda and phi. All six routes enforce the proved condition that the
+  sample is positive, nonconstant, and has at least two observations.
+- Disabled weighted Lindley MDI fitting because the corresponding posterior
+  is improper for every finite sample.
+- Added the closed-form weighted Lindley likelihood initialization with a
+  numerical maximum-likelihood fallback, stable log-prior evaluation, a
+  Fisher-orthogonal mean/shape Metropolis parameterization, mixture-based posterior prediction,
+  and pointwise log-likelihood evaluation.
+- Expanded the public catalogue to 20 distributions and 56 enabled
+  model--prior routes, with analytic, initialization, predictive, guard, and
+  registry tests for the new family.
+
+# fitdistrBayes 0.2.1
+
+- Added `fitdistrBayes_model()`, a public model specification for combining a
+  user-defined density and prior with parameter support, starting values,
+  validation, posterior-propriety and moment declarations, posterior
+  prediction, and an adaptive Metropolis, slice, or user-supplied sampler.
+- Extended `fitdistrBayes()` so the distribution argument can be a
+  `fitdistrBayes_model` object. The fitted object records which extension
+  components and computational engine were used.
+- Added executable tests for a Laplace model with a proper non-objective prior,
+  a slice-sampled Exponential model, and an exact Poisson--Gamma posterior
+  simulator.
+
 # fitdistrBayes 0.2.0
 
 - Expanded the help pages to document the class, structure, and statistical

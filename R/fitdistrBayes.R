@@ -587,6 +587,206 @@
        sample_lmoments = c(l1 = l1, l2 = l2, tau = tau))
 }
 
+.fdb_weighted_lindley_start <- function(x) {
+  lx <- log(x)
+  mean_x <- mean(x)
+  mean_log_x <- mean(lx)
+  mean_x_log_x <- mean(x * lx)
+  x_over_one_plus_x <- ifelse(x > 1, 1 / (1 + 1 / x), x / (1 + x))
+  z_bar <- 1 + mean(x_over_one_plus_x * lx)
+  linear_term <- z_bar * (1 - mean_x) + mean_x_log_x
+  discriminant_term <- 4 * z_bar * mean_x * (z_bar - mean_log_x)
+  discriminant <- linear_term^2 + discriminant_term
+
+  sigma <- phi <- lambda <- NA_real_
+  if (is.finite(discriminant) && discriminant >= 0 &&
+      is.finite(z_bar) && z_bar > 0 && is.finite(mean_x) && mean_x > 0) {
+    root <- sqrt(discriminant)
+    # The alternative form avoids cancellation when the linear term is
+    # negative and nearly equal in magnitude to the square root.
+    sigma <- if (linear_term >= 0) {
+      (linear_term + root) / (2 * z_bar * mean_x)
+    } else {
+      discriminant_term / (2 * z_bar * mean_x * (root - linear_term))
+    }
+    denominator <- sigma * mean_x_log_x - mean_log_x
+    phi <- z_bar / denominator
+    lambda <- sigma * phi
+  }
+
+  values <- c(lambda = lambda, phi = phi)
+  valid <- all(is.finite(values)) && all(values > 0)
+  if (valid) {
+    return(list(
+      values = values,
+      method = "weighted Lindley closed-form likelihood estimator"
+    ))
+  }
+
+  variance_x <- .fdb_second_central_moment(x, mean_x)
+  phi0 <- if (is.finite(variance_x) && variance_x > 0) {
+    max(0.1, mean_x^2 / variance_x)
+  } else {
+    1
+  }
+  sigma0 <- 1 / mean_x
+  if (!is.finite(sigma0) || sigma0 <= 0) sigma0 <- 1
+  initial <- c(log_ratio = log(sigma0), log_phi = log(phi0))
+  sum_log_x <- sum(lx)
+  sum_x <- sum(x)
+  objective <- function(u) {
+    if (length(u) != 2L || any(!is.finite(u))) return(.Machine$double.xmax)
+    log_phi <- u[2L]
+    log_lambda <- u[1L] + log_phi
+    if (log_phi > log(.Machine$double.xmax) ||
+        log_lambda > log(.Machine$double.xmax)) {
+      return(.Machine$double.xmax)
+    }
+    phi_value <- exp(log_phi)
+    lambda_value <- exp(log_lambda)
+    if (!is.finite(phi_value) || !is.finite(lambda_value) ||
+        phi_value <= 0 || lambda_value <= 0) {
+      return(.Machine$double.xmax)
+    }
+    log_lambda_plus_phi <- log_phi + .fdb_softplus(u[1L])
+    ll <- length(x) * (phi_value + 1) * log_lambda -
+      length(x) * log_lambda_plus_phi -
+      length(x) * lgamma(phi_value) +
+      (phi_value - 1) * sum_log_x - lambda_value * sum_x
+    if (is.finite(ll)) -ll else .Machine$double.xmax
+  }
+  optimum <- tryCatch(
+    stats::optim(initial, objective, method = "Nelder-Mead",
+                 control = list(maxit = 2000L, reltol = 1e-10)),
+    error = function(e) NULL
+  )
+  if (is.null(optimum) || !is.finite(optimum$value) ||
+      any(!is.finite(optimum$par))) {
+    .fdb_stop(
+      "Could not compute finite automatic starting values for the weighted Lindley model."
+    )
+  }
+  phi <- exp(optimum$par[2L])
+  lambda <- exp(sum(optimum$par))
+  values <- c(lambda = lambda, phi = phi)
+  if (any(!is.finite(values)) || any(values <= 0)) {
+    .fdb_stop(
+      "Could not compute positive automatic starting values for the weighted Lindley model."
+    )
+  }
+  list(
+    values = values,
+    method = "weighted Lindley numerical maximum-likelihood fallback"
+  )
+}
+
+.fdb_log_expm1_positive <- function(log_x) {
+  if (length(log_x) != 1L || !is.finite(log_x) || log_x <= 0) {
+    return(-Inf)
+  }
+  if (log_x < 50) return(log(expm1(log_x)))
+  log_x + log1p(-exp(-log_x))
+}
+
+.fdb_log_positive_difference <- function(log_positive,
+                                         log_subtracted) {
+  if (length(log_positive) != 1L || length(log_subtracted) != 1L ||
+      !is.finite(log_positive) || !is.finite(log_subtracted) ||
+      log_subtracted >= log_positive) {
+    return(-Inf)
+  }
+  log_positive + log1p(-exp(log_subtracted - log_positive))
+}
+
+.fdb_weighted_lindley_lambda_from_mean <- function(mu, phi) {
+  if (length(mu) != 1L || length(phi) != 1L ||
+      !is.finite(mu) || !is.finite(phi) || mu <= 0 || phi <= 0) {
+    return(NA_real_)
+  }
+  linear <- phi * (mu - 1)
+  constant <- phi * (phi + 1)
+  discriminant <- linear^2 + 4 * mu * constant
+  if (!is.finite(discriminant) || discriminant <= 0) return(NA_real_)
+  root <- sqrt(discriminant)
+  lambda <- if (linear >= 0) {
+    2 * constant / (root + linear)
+  } else {
+    (root - linear) / (2 * mu)
+  }
+  if (is.finite(lambda) && lambda > 0) lambda else NA_real_
+}
+
+.fdb_weighted_lindley_log_prior <- function(lambda, phi, prior) {
+  if (!is.finite(phi) || !is.finite(lambda) || phi <= 0 || lambda <= 0) {
+    return(-Inf)
+  }
+  log_phi <- log(phi)
+  log_lambda <- log(lambda)
+  log_sum <- .fdb_logsumexp(c(log_lambda, log_phi))
+  trigamma_phi <- trigamma(phi)
+  if (!is.finite(trigamma_phi) || trigamma_phi <= 0) return(-Inf)
+  log_trigamma <- log(trigamma_phi)
+  log_c <- .fdb_log_expm1_positive(log_phi + log_trigamma)
+  if (!is.finite(log_c)) return(-Inf)
+
+  if (prior == "first-rule") return(-log_lambda - log_phi)
+
+  if (prior %in% c("jeffreys", "reference")) {
+    log_A <- .fdb_logsumexp(c(
+      2 * log_sum, log(2) + log_lambda, log_phi
+    ))
+    log_radicand <- .fdb_log_expm1_positive(log_A + log_c)
+    if (!is.finite(log_radicand)) return(-Inf)
+    return(0.5 * log_radicand - log_lambda - log_sum)
+  }
+
+  if (prior == "independence-jeffreys") {
+    log_first_positive <- log1p(phi) + 2 * log_sum
+    log_first_negative <- 2 * log_lambda
+    difference <- log_first_negative - log_first_positive
+    if (!is.finite(difference) || difference >= 0) return(-Inf)
+    log_first <- log_first_positive + log1p(-exp(difference))
+    log_second <- .fdb_log_expm1_positive(
+      log(trigamma_phi) + 2 * log_sum
+    )
+    if (!is.finite(log_first) || !is.finite(log_second)) return(-Inf)
+    return(0.5 * (log_first + log_second) - log_lambda - 2 * log_sum)
+  }
+
+  if (prior == "reference-lambda") {
+    log_information_phi <- .fdb_log_positive_difference(
+      log_trigamma, -2 * log_sum
+    )
+    if (!is.finite(log_information_phi)) return(-Inf)
+    return(-log_lambda + 0.5 * log_information_phi)
+  }
+
+  if (prior == "reference-phi") {
+    log_A <- .fdb_logsumexp(c(
+      2 * log_sum, log(2) + log_lambda, log_phi
+    ))
+    log_sqrt_phi_plus_one <- 0.5 * log1p(phi)
+    log_sqrt_phi <- 0.5 * log_phi
+    log_s <- .fdb_logsumexp(c(log_sqrt_phi_plus_one, log_sqrt_phi))
+    weight_zero <- exp(log_sqrt_phi_plus_one - log_s)
+    weight_infinity <- exp(log_sqrt_phi - log_s)
+    log_q_zero <- .fdb_log_positive_difference(
+      log(trigamma(phi + 1)), -log1p(phi)
+    )
+    log_q_infinity <- .fdb_log_positive_difference(
+      log_trigamma, -log_phi
+    )
+    if (!is.finite(log_q_zero) || !is.finite(log_q_infinity)) return(-Inf)
+    return(
+      0.5 * (log_phi + log_A) - log_lambda - log_sum - log_s +
+        0.5 * weight_zero * log_q_zero +
+        0.5 * weight_infinity * log_q_infinity
+    )
+  }
+
+  -Inf
+}
+
 .fdb_normalize_name <- function(x) {
   y <- tolower(trimws(x))
   y <- gsub("[_.]+", "-", y)
@@ -637,19 +837,30 @@
     "t" = "t",
     "student-t" = "t",
     "student" = "t",
-    "weibull" = "weibull"
+    "weibull" = "weibull",
+    "weighted-lindley" = "weighted lindley",
+    "weightedlindley" = "weighted lindley",
+    "wl" = "weighted lindley"
   )
   if (!key %in% names(aliases)) {
     .fdb_stop(
-      "Unknown distribution '%s'. Recognized models are beta, cauchy, chi-squared, exponential, exponential-logarithmic, Frechet, gamma, geometric, Gumbel, log-normal/lognormal, logistic, Lomax, Nakagami-m, negative binomial, normal, Poisson, Rician, t, and weibull.",
+      "Unknown distribution '%s'. Recognized models are beta, cauchy, chi-squared, exponential, exponential-logarithmic, Frechet, gamma, geometric, Gumbel, log-normal/lognormal, logistic, Lomax, Nakagami-m, negative binomial, normal, Poisson, Rician, t, weibull, and weighted Lindley.",
       distr
     )
   }
   unname(aliases[[key]])
 }
 
-.fdb_prior_name <- function(prior) {
+.fdb_prior_name <- function(prior, model = NULL) {
   key <- .fdb_normalize_name(prior)
+  if (identical(model, "weighted lindley")) {
+    if (key %in% c("reference-lambda", "reference-rate")) {
+      return("reference-lambda")
+    }
+    if (key %in% c("reference-phi", "reference-shape")) {
+      return("reference-phi")
+    }
+  }
   aliases <- c(
     "j" = "jeffreys",
     "jeffreys" = "jeffreys",
@@ -666,13 +877,14 @@
     "first-rule" = "first-rule",
     "jeffreys-first-rule" = "first-rule",
     "reference-shape" = "reference-shape",
+    "reference-phi" = "reference-phi",
     "reference-rate" = "reference-rate",
     "reference-theta" = "reference-theta",
     "reference-lambda" = "reference-rate"
   )
   if (!key %in% names(aliases)) {
     .fdb_stop(
-      "Unknown objective prior '%s'. Use Jeffreys, Jeffreys first-rule, reference, MDI, independence-Jeffreys, reference-shape, reference-theta, or reference-rate as appropriate.",
+      "Unknown objective prior '%s'. Use Jeffreys, Jeffreys first-rule, reference, MDI, independence-Jeffreys, reference-shape, reference-phi, reference-theta, or reference-rate as appropriate.",
       prior
     )
   }
@@ -757,6 +969,12 @@
          "adaptive Metropolis", "n >= 2; nonconstant sample"),
     rows("weibull", c("jeffreys", "reference"), "shape, scale", "none",
          "marginal slice + exact conditional Gamma transform",
+         "n >= 2; x > 0; nonconstant sample"),
+    rows("weighted lindley",
+         c("jeffreys", "reference", "first-rule",
+           "independence-jeffreys", "reference-lambda", "reference-phi"),
+         "lambda, phi", "none",
+         "adaptive Metropolis in Fisher-orthogonal mean coordinates",
          "n >= 2; x > 0; nonconstant sample")
   ))
 }
@@ -824,6 +1042,11 @@ fitdistrBayes_routes <- function(model = NULL) {
       nr > 2,
       sprintf("posterior moments of mu of order q exist iff q < n*size = %g",
               nr)
+    )
+  } else if (model == "weighted lindley") {
+    answer <- certify(
+      answer, parameters, TRUE, TRUE,
+      "all positive integer posterior moments are finite"
     )
   } else if (model == "weibull") {
     answer <- certify(
@@ -2835,10 +3058,147 @@ fitdistrBayes_routes <- function(model = NULL) {
     ))
   }
 
+  if (model == "weighted lindley") {
+    fixed <- .fdb_check_fixed(fixed, character())
+    if (prior == "mdi") reject_mdi("weighted Lindley")
+    require_prior(
+      c("jeffreys", "reference", "first-rule",
+        "independence-jeffreys", "reference-lambda", "reference-phi"),
+      "weighted Lindley"
+    )
+    if (n < 2L || any(x <= 0) || !.fdb_nonconstant(x)) {
+      .fdb_stop(
+        "Weighted Lindley objective posteriors require n >= 2, positive observations, and a nonconstant sample."
+      )
+    }
+    if (!is.finite(S) || !is.finite(sum_log_x)) {
+      .fdb_stop(
+        "Weighted Lindley sufficient statistics exceeded the finite floating-point range."
+      )
+    }
+
+    classical <- .fdb_weighted_lindley_start(x)
+    sv <- resolve_start(
+      classical$values,
+      method = classical$method,
+      positive = c("lambda", "phi")
+    )
+    lambda_start <- unname(sv["lambda"])
+    phi_start <- unname(sv["phi"])
+    mean_start <- phi_start * (lambda_start + phi_start + 1) /
+      (lambda_start * (lambda_start + phi_start))
+    init <- c(log_mean = log(mean_start), log_phi = log(phi_start))
+    logpost <- function(u) {
+      if (length(u) != 2L || any(!is.finite(u))) return(-Inf)
+      log_mean <- u[1L]
+      log_phi <- u[2L]
+      if (log_mean > log(.Machine$double.xmax) ||
+          log_phi > log(.Machine$double.xmax)) {
+        return(-Inf)
+      }
+      mean_parameter <- exp(log_mean)
+      phi <- exp(log_phi)
+      lambda <- .fdb_weighted_lindley_lambda_from_mean(mean_parameter, phi)
+      if (!is.finite(mean_parameter) || !is.finite(phi) ||
+          !is.finite(lambda) || mean_parameter <= 0 || phi <= 0 ||
+          lambda <= 0) {
+        return(-Inf)
+      }
+      log_lambda <- log(lambda)
+      log_lambda_plus_phi <- .fdb_logsumexp(c(log_lambda, log_phi))
+      ll <- n * (phi + 1) * log_lambda -
+        n * log_lambda_plus_phi - n * lgamma(phi) +
+        phi * sum_log_x - lambda * S
+      log_prior <- .fdb_weighted_lindley_log_prior(lambda, phi, prior)
+      log_A <- .fdb_logsumexp(c(
+        2 * log_lambda_plus_phi, log(2) + log_lambda, log_phi
+      ))
+      log_information_lambda <- log_phi + log_A -
+        2 * log_lambda - 2 * log_lambda_plus_phi
+      log_jacobian <- log_mean + log_phi - log_information_lambda
+      answer <- ll + log_prior + log_jacobian
+      if (is.finite(answer)) answer else -Inf
+    }
+    transform <- function(u) {
+      mean_parameter <- .fdb_exp_positive(u[1L])
+      phi <- .fdb_exp_positive(u[2L])
+      lambda <- .fdb_weighted_lindley_lambda_from_mean(mean_parameter, phi)
+      lambda <- .fdb_positive_finite(
+        lambda, "A transformed weighted Lindley rate"
+      )
+      c(lambda = lambda, phi = phi)
+    }
+    sampler <- make_mh(
+      logpost, init, transform, c("lambda", "phi"),
+      "adaptive Metropolis in Fisher-orthogonal mean coordinates"
+    )
+    loglik <- function(theta) {
+      lambda <- theta["lambda"]
+      phi <- theta["phi"]
+      if (length(lambda) != 1L || length(phi) != 1L ||
+          !is.finite(lambda) || !is.finite(phi) ||
+          lambda <= 0 || phi <= 0) {
+        return(rep(-Inf, length(x)))
+      }
+      log_lambda <- log(lambda)
+      log_phi <- log(phi)
+      log_lambda_plus_phi <- .fdb_logsumexp(c(log_lambda, log_phi))
+      answer <- (phi + 1) * log_lambda - log_lambda_plus_phi -
+        lgamma(phi) + (phi - 1) * log(x) + log1p(x) - lambda * x
+      answer[is.nan(answer) | answer == Inf] <- -Inf
+      answer
+    }
+    rng <- function(theta, size) {
+      lambda <- .fdb_positive_finite(theta["lambda"], "Weighted Lindley lambda")
+      phi <- .fdb_positive_finite(theta["phi"], "Weighted Lindley phi")
+      first_component <- stats::runif(size) <
+        stats::plogis(log(lambda) - log(phi))
+      shapes <- phi + as.numeric(!first_component)
+      .fdb_rgamma_positive(size, shape = shapes, rate = lambda)
+    }
+    prior_label <- switch(
+      prior,
+      jeffreys = "Fisher-information Jeffreys",
+      reference = "one-group reference (equal to Fisher-information Jeffreys)",
+      `first-rule` = "Jeffreys' first rule",
+      `independence-jeffreys` = "independence Jeffreys",
+      `reference-lambda` = "ordered reference (lambda interest)",
+      `reference-phi` = "ordered reference (phi interest)"
+    )
+    prior_kernel <- switch(
+      prior,
+      jeffreys = "sqrt(A(lambda,phi)*c(phi)-1)/(lambda*(lambda+phi))",
+      reference = "sqrt(A(lambda,phi)*c(phi)-1)/(lambda*(lambda+phi))",
+      `first-rule` = "1/(lambda*phi)",
+      `independence-jeffreys` = paste0(
+        "sqrt((((phi+1)*(lambda+phi)^2-lambda^2)*",
+        "(trigamma(phi)*(lambda+phi)^2-1)))/(lambda*(lambda+phi)^2)"
+      ),
+      `reference-lambda` = paste0(
+        "sqrt(trigamma(phi)-1/(lambda+phi)^2)/lambda"
+      ),
+      `reference-phi` = paste0(
+        "sqrt(phi*A(lambda,phi))/(lambda*(lambda+phi)*s(phi))*",
+        "Q0(phi)^(w0(phi)/2)*Qinf(phi)^(winf(phi)/2)"
+      )
+    )
+    return(list(
+      sampler = sampler, parameters = c("lambda", "phi"),
+      prior_label = prior_label,
+      prior_kernel = prior_kernel,
+      propriety = paste0(
+        "proper: n >= 2, positive nonconstant sample; all positive ",
+        "posterior moments of lambda and phi are finite"
+      ),
+      loglik = loglik, rng = rng, fixed = fixed
+    ))
+  }
+
   .fdb_stop("Internal error: model '%s' has no implementation.", model)
 }
 
-.fdb_build_custom <- function(x, density, prior, start, fixed, dots, control) {
+.fdb_build_custom <- function(x, density, prior, start, fixed, dots, control,
+                              spec = NULL) {
   if (!is.function(prior)) {
     .fdb_stop("A user-defined density requires a user-defined prior function.")
   }
@@ -2860,16 +3220,33 @@ fitdistrBayes_routes <- function(model = NULL) {
     .fdb_stop("Parameters cannot be both unknown and fixed: %s.",
               paste(overlap, collapse = ", "))
   }
-  bounds <- .fdb_custom_bounds(start, control$lower, control$upper)
+  support_checked <- .fdb_extension_validate_data(spec, x, fixed)
+  lower <- if (!is.null(control$lower)) control$lower else
+    if (!is.null(spec)) spec$lower else NULL
+  upper <- if (!is.null(control$upper)) control$upper else
+    if (!is.null(spec)) spec$upper else NULL
+  bounds <- .fdb_custom_bounds(start, lower, upper)
+  requested_density_log <- if (!is.null(control$density_is_log)) {
+    control$density_is_log
+  } else if (!is.null(spec)) {
+    spec$density_is_log
+  } else NULL
+  requested_prior_log <- if (!is.null(control$prior_is_log)) {
+    control$prior_is_log
+  } else if (!is.null(spec)) {
+    spec$prior_is_log
+  } else NULL
   density_log_mode <- .fdb_resolve_log_mode(
-    density, control$density_is_log, "density"
+    density, requested_density_log, "density"
   )
   prior_log_mode <- .fdb_resolve_log_mode(
-    prior, control$prior_is_log, "prior"
+    prior, requested_prior_log, "prior"
   )
   prior_formals <- names(formals(prior))
+  prior_style <- if (!is.null(spec) && identical(control$prior_style, "auto"))
+    spec$prior_style else control$prior_style
   prior_vector_style <- switch(
-    control$prior_style,
+    prior_style,
     "vector" = TRUE,
     "scalar" = FALSE,
     "auto" = length(prior_formals) > 0L &&
@@ -2911,11 +3288,19 @@ fitdistrBayes_routes <- function(model = NULL) {
   init <- .fdb_to_unconstrained(start, bounds$lower, bounds$upper)
   initialization <- list(
     source = "user-supplied",
-    method = "user-specified starting values for a custom density",
+    method = if (is.null(spec)) {
+      "user-specified starting values for a custom density"
+    } else {
+      "starting values stored in or supplied for a model specification"
+    },
     automatic = NULL,
     center = start,
     supplied = start,
     sampled_parameters = names(start)
+  )
+  propriety <- .fdb_extension_propriety(spec, x, fixed)
+  moment_status <- .fdb_extension_moments(
+    spec, x, fixed, parameters = names(start)
   )
   logpost <- function(u) {
     tr <- .fdb_from_unconstrained(u, bounds$lower, bounds$upper,
@@ -2931,30 +3316,117 @@ fitdistrBayes_routes <- function(model = NULL) {
     if (!is.finite(lp)) return(-Inf)
     ll + lp + tr$log_jacobian
   }
+  logpost_natural <- function(theta) {
+    theta <- if (is.list(theta)) unlist(theta, use.names = TRUE) else theta
+    if (!is.numeric(theta) || length(theta) != length(start) ||
+        any(!is.finite(theta))) return(-Inf)
+    if (is.null(names(theta))) names(theta) <- names(start)
+    if (!setequal(names(theta), names(start)) || anyDuplicated(names(theta))) {
+      return(-Inf)
+    }
+    theta <- theta[names(start)]
+    if (any(theta <= bounds$lower | theta >= bounds$upper)) return(-Inf)
+    ll <- .fdb_call_density(
+      density, x, theta, fixed, dots, log_mode = density_log_mode
+    )
+    if (!is.finite(ll)) return(-Inf)
+    lp <- .fdb_call_prior(
+      prior, theta, log_mode = prior_log_mode,
+      vector_style = prior_vector_style
+    )
+    if (!is.finite(lp)) return(-Inf)
+    ll + lp
+  }
   transform <- function(u) {
+    if (is.null(names(u))) names(u) <- names(start)
     .fdb_from_unconstrained(u, bounds$lower, bounds$upper,
                             jacobian = FALSE)
   }
-  sampler <- function(iter, warmup, thin, chains, control) {
-    ans <- .fdb_amwg(logpost, init, iter, warmup, thin, chains, control)
-    list(
-      chains = .fdb_transform_matrix(ans$chains, transform, names(start)),
-      acceptance = ans$acceptance,
-      acceptance_warmup = ans$acceptance_warmup,
-      acceptance_all = ans$acceptance_all,
-      independent = FALSE,
-      engine = "generic adaptive Metropolis",
-      initialization = initialization
-    )
+  to_unconstrained <- function(theta) {
+    if (is.null(names(theta))) names(theta) <- names(start)
+    .fdb_to_unconstrained(theta[names(start)], bounds$lower, bounds$upper)
   }
+  selected_engine <- if (is.null(spec)) "adaptive_metropolis" else spec$engine
+  sampler <- switch(
+    selected_engine,
+    adaptive_metropolis = function(iter, warmup, thin, chains, control) {
+      ans <- .fdb_amwg(logpost, init, iter, warmup, thin, chains, control)
+      list(
+        chains = .fdb_transform_matrix(ans$chains, transform, names(start)),
+        acceptance = ans$acceptance,
+        acceptance_warmup = ans$acceptance_warmup,
+        acceptance_all = ans$acceptance_all,
+        independent = FALSE,
+        engine = "generic adaptive Metropolis",
+        initialization = initialization
+      )
+    },
+    slice = function(iter, warmup, thin, chains, control) {
+      if (length(start) != 1L) {
+        .fdb_stop("The generic slice engine requires exactly one unknown parameter.")
+      }
+      raw <- .fdb_slice_chains(
+        logpost, unname(init), iter, warmup, thin, chains, control
+      )
+      raw <- lapply(raw, function(z) {
+        ans <- matrix(z, ncol = 1L)
+        colnames(ans) <- names(start)
+        ans
+      })
+      list(
+        chains = .fdb_transform_matrix(raw, transform, names(start)),
+        acceptance = NULL,
+        acceptance_warmup = NULL,
+        acceptance_all = NULL,
+        independent = FALSE,
+        engine = "generic univariate slice sampling",
+        initialization = initialization
+      )
+    },
+    custom = function(iter, warmup, thin, chains, control) {
+      n_save <- floor((iter - warmup) / thin)
+      label <- spec$engine_label %||% "user-supplied posterior sampler"
+      .fdb_extension_sampler(
+        spec$sampler,
+        arguments = list(
+          x = x,
+          log_posterior = logpost_natural,
+          log_posterior_unconstrained = logpost,
+          start = start,
+          fixed = fixed,
+          lower = bounds$lower,
+          upper = bounds$upper,
+          to_unconstrained = to_unconstrained,
+          from_unconstrained = transform,
+          iter = iter,
+          warmup = warmup,
+          thin = thin,
+          chains = chains,
+          n_save = n_save,
+          control = control,
+          dots = dots
+        ),
+        parameters = names(start), chains = chains, n_save = n_save,
+        independent = spec$independent, engine_label = label,
+        initialization = initialization
+      )
+    }
+  )
   loglik <- function(theta) {
     .fdb_call_density_pointwise(
       density, x, theta, fixed, dots, log_mode = density_log_mode
     )
   }
   rng <- NULL
-  if (is.function(control$rng)) {
-    user_rng <- control$rng
+  rng_source <- if (is.function(control$rng)) control$rng else
+    if (!is.null(spec) && is.function(spec$rng)) spec$rng else NULL
+  rng_validator <- if (is.function(control$rng_validator)) {
+    control$rng_validator
+  } else if (!is.null(spec) && is.function(spec$rng_validator)) {
+    spec$rng_validator
+  } else NULL
+  if (is.function(rng_source)) {
+    user_rng <- rng_source
     rng <- function(theta, size) {
       ans <- do.call(user_rng,
                      c(list(size), as.list(theta), fixed, dots))
@@ -2967,8 +3439,8 @@ fitdistrBayes_routes <- function(model = NULL) {
           )
         )
       }
-      if (is.function(control$rng_validator)) {
-        valid <- control$rng_validator(ans)
+      if (is.function(rng_validator)) {
+        valid <- rng_validator(ans)
         if (!is.logical(valid) || !length(valid) || anyNA(valid) ||
             !(length(valid) %in% c(1L, size)) || !all(valid)) {
           .fdb_stop(
@@ -2985,18 +3457,30 @@ fitdistrBayes_routes <- function(model = NULL) {
   list(
     sampler = sampler,
     parameters = names(start),
-    prior_label = "user-defined",
-    prior_kernel = "user-supplied function",
-    propriety = "not certified: user responsibility",
+    prior_label = if (is.null(spec)) "user-defined" else spec$prior_label,
+    prior_kernel = if (is.null(spec)) "user-supplied function" else
+      spec$prior_kernel,
+    propriety = propriety$message,
+    propriety_declared = propriety$declared,
+    moment_status = moment_status,
     loglik = loglik,
     rng = rng,
     fixed = fixed,
     bounds = bounds,
+    support_checked = support_checked,
+    extension = if (is.null(spec)) NULL else list(
+      engine = selected_engine,
+      reference = spec$reference,
+      propriety_source = if (propriety$declared) "user-supplied" else
+        "not supplied",
+      moment_source = if (is.null(moment_status)) "not supplied" else
+        "user-supplied"
+    ),
     custom_contract = list(
       density_is_log = density_log_mode,
       prior_is_log = prior_log_mode,
       prior_style = if (prior_vector_style) "vector" else "scalar",
-      rng_validated = is.function(control$rng_validator)
+      rng_validated = is.function(rng_validator)
     )
   )
 }
@@ -3004,13 +3488,16 @@ fitdistrBayes_routes <- function(model = NULL) {
 #' Objective Bayesian fitting of parametric distributions
 #'
 #' @param x Numeric vector of observations.
-#' @param distr A recognized distribution name (case-insensitive) or a density
-#'   function whose first argument is the observation vector. Version 0.2.0
-#'   includes 19 built-in distributions, including Gumbel, Frechet, Lomax,
-#'   Nakagami-m, Exponential-Logarithmic, and Rician.
-#' @param prior An objective-prior name or, for a custom density, a prior
-#'   function.  A custom prior may accept named scalar parameters or a named
-#'   vector as its first argument, and may optionally accept log = TRUE.
+#' @param distr A recognized distribution name (case-insensitive), a density
+#'   function whose first argument is the observation vector, or an object made
+#'   by [fitdistrBayes_model()]. Version 0.2.2
+#'   includes 20 built-in distributions, including Gumbel, Frechet, Lomax,
+#'   Nakagami-m, Exponential-Logarithmic, Rician, and weighted Lindley.
+#' @param prior An objective-prior name or, for a custom density function, a
+#'   prior function.  Omit this argument when `distr` is an object made by
+#'   [fitdistrBayes_model()], because its prior is part of the specification.
+#'   A custom prior may accept named scalar parameters or a named vector as its
+#'   first argument, and may optionally accept log = TRUE.
 #' @param start Optional named starting values. Required for custom densities.
 #' @param fixed Optional named list of fixed parameters. Currently used for
 #'   negative-binomial size and Student-t degrees of freedom.
@@ -3026,7 +3513,7 @@ fitdistrBayes_routes <- function(model = NULL) {
 #'
 #' @return An object of class "fitdistrBayes".
 #' @export
-fitdistrBayes <- function(x, distr, prior, start = NULL, fixed = NULL,
+fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
                           iter = 4000L, warmup = floor(iter / 2),
                           thin = 1L, chains = 4L, seed = NULL,
                           na.action = c("fail", "omit"),
@@ -3049,16 +3536,45 @@ fitdistrBayes <- function(x, distr, prior, start = NULL, fixed = NULL,
   x_used <- validated$x
   dots <- list(...)
 
-  custom <- is.function(distr)
+  model_spec <- inherits(distr, "fitdistrBayes_model")
+  custom_density <- is.function(distr)
+  custom <- model_spec || custom_density
   if (!custom && (!is.character(distr) || length(distr) != 1L ||
                   is.na(distr) || !nzchar(trimws(distr)))) {
     .fdb_stop("'distr' must be one recognized character string or a density function.")
   }
 
-  if (custom) {
+  if (model_spec) {
+    if (!is.null(prior)) {
+      .fdb_stop(
+        "Do not supply 'prior' when 'distr' is a fitdistrBayes_model object; the prior is part of the model specification."
+      )
+    }
+    spec <- distr
+    model <- spec$name
+    start_used <- if (is.null(start)) spec$start else start
+    fixed_used <- spec$fixed
+    if (!is.null(fixed)) {
+      if (!is.list(fixed) || is.null(names(fixed)) ||
+          any(!nzchar(names(fixed))) || anyDuplicated(names(fixed))) {
+        .fdb_stop("'fixed' must be NULL or a uniquely named list.")
+      }
+      fixed_used[names(fixed)] <- fixed
+    }
+    built <- .fdb_build_custom(
+      x_used, spec$density, spec$prior, start_used, fixed_used,
+      dots, control, spec = spec
+    )
+    prior_key <- "user-defined"
+    if (!isTRUE(built$propriety_declared)) {
+      .fdb_warn(
+        "Posterior propriety for this user-defined model has not been supplied and cannot be certified automatically."
+      )
+    }
+  } else if (custom_density) {
     model <- "user-defined"
     built <- .fdb_build_custom(x_used, distr, prior, start, fixed,
-                               dots, control)
+                               dots, control, spec = NULL)
     prior_key <- "user-defined"
     .fdb_warn(
       "Posterior propriety for a user-defined density/prior cannot be certified automatically."
@@ -3069,7 +3585,7 @@ fitdistrBayes <- function(x, distr, prior, start = NULL, fixed = NULL,
       .fdb_stop("Built-in distributions require 'prior' as one character string.")
     }
     model <- .fdb_model_name(distr)
-    prior_key <- .fdb_prior_name(prior)
+    prior_key <- .fdb_prior_name(prior, model = model)
     built <- .fdb_build_builtin(x_used, model, prior_key, fixed, start)
   }
 
@@ -3092,9 +3608,13 @@ fitdistrBayes <- function(x, distr, prior, start = NULL, fixed = NULL,
   posterior_summary <- .fdb_summarize(
     chain_list, independent = sampled$independent
   )
-  moment_status <- .fdb_moment_status(
-    model, prior_key, built$parameters, length(x_used), built$fixed, x_used
-  )
+  moment_status <- if (!is.null(built$moment_status)) {
+    built$moment_status
+  } else {
+    .fdb_moment_status(
+      model, prior_key, built$parameters, length(x_used), built$fixed, x_used
+    )
+  }
   moment_index <- match(posterior_summary$parameter,
                         moment_status$parameter)
   posterior_summary$mean_exists <- moment_status$mean_exists[moment_index]
@@ -3192,11 +3712,16 @@ fitdistrBayes <- function(x, distr, prior, start = NULL, fixed = NULL,
     call = call,
     model = list(
       name = model,
-      distribution_input = if (custom) "<function>" else distr,
+      distribution_input = if (model_spec) {
+        "<fitdistrBayes_model>"
+      } else if (custom_density) {
+        "<function>"
+      } else distr,
       parameters = built$parameters,
       fixed = built$fixed,
       n = length(x_used),
-      support_checked = !custom,
+      support_checked = if (custom) isTRUE(built$support_checked) else TRUE,
+      extension = if (custom) built$extension else NULL,
       custom_contract = if (custom) built$custom_contract else NULL
     ),
     prior = list(

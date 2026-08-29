@@ -1,6 +1,6 @@
 # fitdistrBayes
 
-`fitdistrBayes` 0.2.0 fits common univariate distributions under registered
+`fitdistrBayes` 0.2.2 fits common univariate distributions under registered
 objective Bayesian priors through a deliberately small interface:
 
 ```r
@@ -17,7 +17,7 @@ exist, so a finite chain is not used to justify a divergent moment.
 Install the source archive supplied with this research release and load it:
 
 ```r
-install.packages("fitdistrBayes_0.2.0.tar.gz", repos = NULL,
+install.packages("fitdistrBayes_0.2.2.tar.gz", repos = NULL,
                  type = "source")
 library(fitdistrBayes)
 ```
@@ -64,13 +64,14 @@ dim(ll)
 
 ## Supported routes
 
-Version 0.2.0 has 50 enabled model--prior combinations for 19 distributions.
+Version 0.2.2 has 56 enabled model--prior combinations for 20 distributions.
 The public machine-readable catalogue is the concise way to inspect them:
 
 ```r
 fitdistrBayes_routes()
 fitdistrBayes_routes("gamma")
 fitdistrBayes_routes("t")
+fitdistrBayes_routes("weighted lindley")
 ```
 
 The catalogue reports the estimated parameters, any required fixed parameter,
@@ -94,6 +95,13 @@ Frechet, and Lomax. The Exponential-Logarithmic model uses a stable scalar
 moment equation. Exact independent posterior simulation does not require a
 starting point. The selected rule and center are stored in
 `fit$initialization`.
+
+For weighted Lindley data, the package uses the model's closed-form likelihood
+estimator (with a numerical maximum-likelihood fallback) and samples in the
+exactly Fisher-orthogonal mean/shape parameterization. The public output remains
+on the original `lambda, phi` scale. The one-group `reference` prior equals
+Fisher-information Jeffreys; `reference-lambda` and `reference-phi` select the
+two exact ordered reference priors.
 
 For the implemented Frechet parameterization,
 `F(x) = exp(-scale * x^(-shape))`; hence the argument named `scale` is the

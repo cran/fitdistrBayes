@@ -2,7 +2,7 @@
 \alias{fitdistrBayes}
 \title{Objective Bayesian Distribution Fitting}
 \usage{
-fitdistrBayes(x, distr, prior, start = NULL, fixed = NULL,
+fitdistrBayes(x, distr, prior = NULL, start = NULL, fixed = NULL,
   iter = 4000L, warmup = floor(iter / 2), thin = 1L,
   chains = 4L, seed = NULL, na.action = c("fail", "omit"),
   control = list(), ...)
@@ -10,14 +10,18 @@ fitdistrBayes(x, distr, prior, start = NULL, fixed = NULL,
 \arguments{
   \item{x}{Numeric vector of observations.}
   \item{distr}{A recognized distribution name, matched without regard to
-  case, or a density function evaluated at its first argument.}
-  \item{prior}{A registered objective-prior name or, for a custom density, a
-  prior function on the documented parameterization.}
+  case, a density function evaluated at its first argument, or an object made
+  by \code{fitdistrBayes_model()}.}
+  \item{prior}{A registered objective-prior name or, for a custom density
+  function, a prior function on the documented parameterization. Omit this
+  argument when \code{distr} is a \code{fitdistrBayes_model} object.}
   \item{start}{Optional named starting values. If omitted for a built-in
   non-exact route, closed-form classical estimates are used: ordinary
   moments where available, quantile matching for models without the required
   moments, and L-moments for Weibull, Frechet, and Lomax. The
-  Exponential-Logarithmic start solves one scalar moment equation. Required for custom densities and
+  Exponential-Logarithmic start solves one scalar moment equation, and the
+  weighted Lindley start uses its closed-form likelihood estimator with a
+  numerical maximum-likelihood fallback. Required for custom densities and
   ignored with a warning for exact independent posterior simulation.}
   \item{fixed}{Optional named list of fixed parameters.}
   \item{iter}{Total iterations per chain, including warmup.}
@@ -76,7 +80,8 @@ support \code{log_lik()} and \code{predict()}; they are omitted when
 }
 \description{
 Fits a univariate parametric distribution under a registered objective
-Bayesian prior. For built-in models, data-dependent posterior-propriety checks
+Bayesian prior or a user-supplied model and prior. For built-in models,
+data-dependent posterior-propriety checks
 are executed before any numerical integration or simulation. Posterior means,
 variances, and their Monte Carlo errors are reported only when the
 corresponding moments have been certified to exist.
@@ -85,7 +90,7 @@ corresponding moments have been certified to exist.
 Recognized distributions are beta, Cauchy, chi-squared, exponential,
 Exponential-Logarithmic, Frechet, Gamma, geometric, Gumbel, lognormal,
 logistic, Lomax, Nakagami-m, negative binomial, Normal, Poisson, Rician,
-Student t, and Weibull. Available priors depend on the model and parameter of interest;
+Student t, Weibull, and weighted Lindley. Available priors depend on the model and parameter of interest;
 unsupported or known-improper model-prior combinations stop with an
 informative error.
 
@@ -98,7 +103,11 @@ For the Exponential-Logarithmic model, \code{"reference"} and
 \code{"reference-theta"} select the ordering in which theta is the parameter
 of interest; \code{"reference-rate"} selects the rate parameter. The Lomax
 reference posterior and Nakagami-m MDI posterior are disabled because they
-are improper. Rician currently has only the proper joint-Jeffreys route.
+are improper. Rician currently has only the proper joint-Jeffreys route. For
+weighted Lindley, \code{"reference"} is the one-group reference prior and is
+equal to the Fisher-information Jeffreys prior; \code{"reference-lambda"} and
+\code{"reference-phi"} select the exact ordered reference prior for the stated
+scalar target. Its MDI posterior is improper and therefore disabled.
 
 For numerical routes, the automatic center and any user overrides are
 recorded in \code{fit$initialization}. Each MCMC chain is dispersed from this
@@ -123,7 +132,7 @@ separately. Entropy evaluation uses \code{entropy_tol} and the positive integer
 \code{entropy_exact_limit}. Set \code{store_callables = FALSE} to omit the
 closures needed by \code{predict()} and \code{log_lik()}.
 
-For a custom model, \code{lower} and \code{upper} define componentwise bounds;
+For a custom density function, \code{lower} and \code{upper} define componentwise bounds;
 the package supplies the corresponding transforms and Jacobian. Log mode is
 inferred only from an explicit \code{log} formal. It can be forced with
 \code{density_is_log} and \code{prior_is_log}; an initial ordinary/log
@@ -131,7 +140,10 @@ consistency check is made when possible. \code{prior_style} is one of
 \code{"auto"}, \code{"scalar"}, or \code{"vector"}. A predictive function can
 be supplied as \code{rng}, and \code{rng_validator} may check its returned
 support. Posterior propriety and moment existence remain the user's
-responsibility for custom targets.
+responsibility for custom targets. Use \code{fitdistrBayes_model()} for an
+explicit reusable specification that can additionally select the generic
+slice sampler or a user-supplied posterior sampler and carry executable
+support, propriety, and moment information.
 }
 \section{Built-in models, parameters, and priors}{
 The table below gives the canonical model name, the parameters returned by the
@@ -163,7 +175,9 @@ such as \code{"log-normal"}, \code{"negative binomial"}, \code{"student-t"},
 \code{rician} \tab \code{noncentrality, scale} \tab \code{jeffreys} \cr
 \code{t} \tab \code{location, scale, df} \tab \code{jeffreys, reference, mdi} \cr
  \tab  \tab \code{independence-jeffreys} \cr
-\code{weibull} \tab \code{shape, scale} \tab \code{jeffreys, reference}
+\code{weibull} \tab \code{shape, scale} \tab \code{jeffreys, reference} \cr
+\code{weighted lindley} \tab \code{lambda, phi} \tab \code{jeffreys, reference, first-rule} \cr
+ \tab  \tab \code{independence-jeffreys, reference-lambda, reference-phi}
 }
 
 For Student t, \code{independence-jeffreys} estimates \code{df}; the other
@@ -183,7 +197,13 @@ parameterizations. Geometric observations count failures before the first
 success. The Gumbel model is the location-scale distribution for maxima. For
 Lomax, the support is \eqn{x >= 0}; for Nakagami-m, \code{spread} is
 \eqn{E(X^2)}. Negative-binomial \code{size} is known and supplied in
-\code{fixed}, whereas \code{mu} is estimated.
+\code{fixed}, whereas \code{mu} is estimated. Weighted Lindley observations
+are strictly positive, and its density is
+\deqn{f(x\mid\lambda,\phi)=\frac{\lambda^{\phi+1}}
+{(\lambda+\phi)\Gamma(\phi)}x^{\phi-1}(1+x)e^{-\lambda x}.}
+Its MCMC is carried out in the exactly Fisher-orthogonal mean/shape
+parameterization while the returned parameters remain \code{lambda} and
+\code{phi}.
 }
 \section{Posterior propriety and reported moments}{
 Most objective priors are improper as prior measures. A fit is attempted only
@@ -216,8 +236,8 @@ two methods are computed on demand and require retained callables.
 \section{Complete console tutorial}{
 The installed file
 \code{system.file("examples", "tutorial_fitdistrBayes_all_models.R",
-package = "fitdistrBayes")} contains simulated data for all 19 built-in
-families, all 50 enabled model-prior routes, comparisons with
+package = "fitdistrBayes")} contains simulated data for all 20 built-in
+families, all 56 enabled model-prior routes, comparisons with
 \code{MASS::fitdistr()} where directly available, and a final diagnostic table.
 It prints to the console and does not save analysis results. Set
 \code{quick_mode <- TRUE} for a short demonstration or \code{FALSE} for the
@@ -250,6 +270,11 @@ Computation and Simulation}, 96(8), 1773--1801.
 Achire E, Ramos E, Ramos PL (2025). ``On the posterior property of the
 Rician distribution.'' \emph{Statistics}, 59(1), 167--186.
 \doi{10.1080/02331888.2024.2425688}.
+
+Mota AL, Ramos PL, Ferreira PH, Tomazella VLD, Louzada F (2021).
+``A reparameterized weighted Lindley distribution: Properties, estimation
+and applications.'' \emph{Revista Colombiana de Estadistica}, 44(1), 65--90.
+\doi{10.15446/rce.v44n1.86566}.
 }
 \examples{
 # A first exact-posterior example.
@@ -358,6 +383,14 @@ fit_el <- fitdistrBayes(x_el, "exponential-logarithmic", "reference-rate",
 x_rician <- sqrt(rnorm(40, 5, 2)^2 + rnorm(40, 0, 2)^2)
 fit_rician <- fitdistrBayes(x_rician, "rician", "jeffreys",
   iter = 120, warmup = 40, chains = 2, seed = 120, control = quick)
+
+lambda_wl <- 2.5
+phi_wl <- 0.8
+component_wl <- runif(40) < lambda_wl / (lambda_wl + phi_wl)
+x_wl <- rgamma(40, shape = phi_wl + as.numeric(!component_wl),
+  rate = lambda_wl)
+fit_wl <- fitdistrBayes(x_wl, "weighted lindley", "reference-lambda",
+  iter = 120, warmup = 40, chains = 2, seed = 121, control = quick)
 
 tutorial <- system.file(
   "examples", "tutorial_fitdistrBayes_all_models.R",

@@ -15,11 +15,11 @@ the following character columns:
   \item{\code{model}}{Canonical distribution name.}
   \item{\code{prior}}{Accepted objective-prior label.}
   \item{\code{parameters}}{Comma-separated parameters estimated by the route.}
-  \item{\code{fixed}}{Parameters that the user must supply in \code{fixed}, or
+  \item{\code{required_fixed}}{Parameters that the user must supply in \code{fixed}, or
   an empty string when none are required.}
   \item{\code{engine}}{Posterior simulation or numerical-integration strategy
   used by the route.}
-  \item{\code{condition}}{Concise sample condition under which the posterior
+  \item{\code{posterior_condition}}{Concise sample condition under which the posterior
   is proper. The fitting function performs the authoritative check on the
   supplied observations.}
 }
@@ -34,4 +34,5 @@ sample.
 fitdistrBayes_routes()
 fitdistrBayes_routes("gamma")
 fitdistrBayes_routes("t")
+fitdistrBayes_routes("weighted lindley")
 }

@@ -1,5 +1,5 @@
 # =============================================================================
-# fitdistrBayes 0.2.0: simple tutorial covering all models and priors
+# fitdistrBayes 0.2.2: simple tutorial covering all models and priors
 # =============================================================================
 #
 # This file:
@@ -12,10 +12,10 @@
 # source("tutorial_fitdistrBayes_all_models.R")
 #
 # If the package is not installed, run this ONCE with the tarball path:
-# install.packages("fitdistrBayes_0.2.0.tar.gz", repos = NULL, type = "source")
+# install.packages("fitdistrBayes_0.2.2.tar.gz", repos = NULL, type = "source")
 
 if (!requireNamespace("fitdistrBayes", quietly = TRUE)) {
-  stop("Install fitdistrBayes_0.2.0.tar.gz first.")
+  stop("Install fitdistrBayes_0.2.2.tar.gz first.")
 }
 if (!requireNamespace("MASS", quietly = TRUE)) {
   stop("The recommended MASS package is not available in this R installation.")
@@ -608,6 +608,65 @@ cat("\nObjective Bayes:\n")
 show_bayes(rician_bayes)
 
 # =============================================================================
+# 20. WEIGHTED LINDLEY
+# =============================================================================
+cat("\n\n================ WEIGHTED LINDLEY ============\n")
+set.seed(2901)
+lambda_wl <- 2.5
+phi_wl <- 0.8
+component_wl <- runif(100) < lambda_wl / (lambda_wl + phi_wl)
+x_wl <- rgamma(
+  100, shape = phi_wl + as.numeric(!component_wl), rate = lambda_wl
+)
+
+dweighted_lindley <- function(x, lambda, phi, log = FALSE) {
+  log_density <- (phi + 1) * log(lambda) - log(lambda + phi) -
+    lgamma(phi) + (phi - 1) * log(x) + log1p(x) - lambda * x
+  if (log) log_density else exp(log_density)
+}
+
+cat("\nMaximum likelihood:\n")
+print(suppressWarnings(MASS::fitdistr(
+  x_wl, dweighted_lindley, start = list(lambda = 2, phi = 1)
+)))
+
+weighted_lindley_bayes <- list(
+  Jeffreys = fitdistrBayes(
+    x_wl, "weighted lindley", "jeffreys", iter = tutorial_iter,
+    warmup = tutorial_warmup, chains = tutorial_chains, seed = 2902,
+    control = tutorial_control
+  ),
+  One_group_reference = fitdistrBayes(
+    x_wl, "weighted lindley", "reference", iter = tutorial_iter,
+    warmup = tutorial_warmup, chains = tutorial_chains, seed = 2903,
+    control = tutorial_control
+  ),
+  Jeffreys_first_rule = fitdistrBayes(
+    x_wl, "weighted lindley", "first-rule", iter = tutorial_iter,
+    warmup = tutorial_warmup, chains = tutorial_chains, seed = 2904,
+    control = tutorial_control
+  ),
+  Independence_Jeffreys = fitdistrBayes(
+    x_wl, "weighted lindley", "independence-jeffreys",
+    iter = tutorial_iter, warmup = tutorial_warmup,
+    chains = tutorial_chains, seed = 2905, control = tutorial_control
+  ),
+  Reference_lambda = fitdistrBayes(
+    x_wl, "weighted lindley", "reference-lambda", iter = tutorial_iter,
+    warmup = tutorial_warmup, chains = tutorial_chains, seed = 2906,
+    control = tutorial_control
+  ),
+  Reference_phi = fitdistrBayes(
+    x_wl, "weighted lindley", "reference-phi", iter = tutorial_iter,
+    warmup = tutorial_warmup, chains = tutorial_chains, seed = 2907,
+    control = tutorial_control
+  )
+)
+cat("\nObjective Bayes, grouped by prior:\n")
+show_bayes(weighted_lindley_bayes)
+cat("\nThe weighted Lindley MDI posterior is improper and is not fitted.\n")
+
+# =============================================================================
 # FINAL TABLE: all fits and diagnostics
 # =============================================================================
 all_fits <- c(
@@ -629,7 +688,8 @@ all_fits <- c(
   Lomax = lomax_bayes,
   Nakagami_m = nakagami_bayes,
   Exponential_logarithmic = el_bayes,
-  Rician = rician_bayes
+  Rician = rician_bayes,
+  Weighted_lindley = weighted_lindley_bayes
 )
 
 diagnostics <- do.call(rbind, lapply(
@@ -676,6 +736,7 @@ print(confint(gamma_bayes$Jeffreys))
 # Starting values and automatic classical method used:
 print(gamma_bayes$Jeffreys$initialization)
 print(weibull_bayes$Jeffreys$initialization)
+print(weighted_lindley_bayes$Reference_lambda$initialization)
 
 # First posterior draws:
 print(head(as.data.frame(gamma_bayes$Jeffreys)))

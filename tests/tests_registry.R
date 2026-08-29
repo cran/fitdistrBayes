@@ -20,7 +20,8 @@ dat <- list(
   poisson = rpois(25, 3),
   rician = sqrt(rnorm(25, 5, 2)^2 + rnorm(25, 0, 2)^2),
   t = rt(30, 7),
-  weibull = rweibull(25, 2, 3)
+  weibull = rweibull(25, 2, 3),
+  weighted_lindley = NULL
 )
 theta_el <- 0.4
 rate_el <- 1.3
@@ -28,10 +29,16 @@ u_el <- runif(25)
 dat$el <- -(
   log(-expm1((1 - u_el) * log(theta_el))) - log1p(-theta_el)
 ) / rate_el
+lambda_wl <- 2.5
+phi_wl <- 0.8
+component_wl <- runif(25) < lambda_wl / (lambda_wl + phi_wl)
+dat$weighted_lindley <- rgamma(
+  25, shape = phi_wl + as.numeric(!component_wl), rate = lambda_wl
+)
 
 registry <- fitdistrBayes_routes()
-if (nrow(registry) != 50L || anyDuplicated(registry)) {
-  stop("The public route catalogue must contain 50 unique entries.",
+if (nrow(registry) != 56L || anyDuplicated(registry)) {
+  stop("The public route catalogue must contain 56 unique entries.",
        call. = FALSE)
 }
 
@@ -42,7 +49,8 @@ data_key <- c(
   gumbel = "gumbel", lognormal = "lognormal", logistic = "logistic",
   lomax = "lomax", `nakagami-m` = "nakagami",
   `negative binomial` = "nbinom", normal = "normal", Poisson = "poisson",
-  rician = "rician", t = "t", weibull = "weibull"
+  rician = "rician", t = "t", weibull = "weibull",
+  `weighted lindley` = "weighted_lindley"
 )
 
 results <- vector("list", nrow(registry))
