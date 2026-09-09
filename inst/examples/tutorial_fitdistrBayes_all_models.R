@@ -1,5 +1,5 @@
 # =============================================================================
-# fitdistrBayes 0.2.2: simple tutorial covering all models and priors
+# fitdistrBayes: simple tutorial covering all models and priors
 # =============================================================================
 #
 # This file:
@@ -12,10 +12,10 @@
 # source("tutorial_fitdistrBayes_all_models.R")
 #
 # If the package is not installed, run this ONCE with the tarball path:
-# install.packages("fitdistrBayes_0.2.2.tar.gz", repos = NULL, type = "source")
+# install.packages("fitdistrBayes_0.2.3.tar.gz", repos = NULL, type = "source")
 
 if (!requireNamespace("fitdistrBayes", quietly = TRUE)) {
-  stop("Install fitdistrBayes_0.2.2.tar.gz first.")
+  stop("Install fitdistrBayes first.")
 }
 if (!requireNamespace("MASS", quietly = TRUE)) {
   stop("The recommended MASS package is not available in this R installation.")

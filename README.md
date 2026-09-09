@@ -1,6 +1,6 @@
 # fitdistrBayes
 
-`fitdistrBayes` 0.2.2 fits common univariate distributions under registered
+`fitdistrBayes` 0.2.3 fits common univariate distributions under registered
 objective Bayesian priors through a deliberately small interface:
 
 ```r
@@ -17,7 +17,7 @@ exist, so a finite chain is not used to justify a divergent moment.
 Install the source archive supplied with this research release and load it:
 
 ```r
-install.packages("fitdistrBayes_0.2.2.tar.gz", repos = NULL,
+install.packages("fitdistrBayes_0.2.3.tar.gz", repos = NULL,
                  type = "source")
 library(fitdistrBayes)
 ```
@@ -64,7 +64,11 @@ dim(ll)
 
 ## Supported routes
 
-Version 0.2.2 has 56 enabled model--prior combinations for 20 distributions.
+The package has 56 enabled model--prior combinations for 20 distributions.
+For Student-t with unknown degrees of freedom, the independence Jeffreys prior
+requires at least two pairwise distinct observations; samples with ties are
+rejected because the posterior is improper. Fixed-df Student-t models use
+their separate, multiplicity-dependent conditions.
 The public machine-readable catalogue is the concise way to inspect them:
 
 ```r

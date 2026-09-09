@@ -180,8 +180,12 @@ such as \code{"log-normal"}, \code{"negative binomial"}, \code{"student-t"},
  \tab  \tab \code{independence-jeffreys, reference-lambda, reference-phi}
 }
 
-For Student t, \code{independence-jeffreys} estimates \code{df}; the other
-three priors require \code{fixed = list(df = ...)}. The generic label
+For Student t, \code{independence-jeffreys} estimates \code{df} and requires
+at least two pairwise distinct observations. Tied observations produce an
+improper posterior when \code{df} is unrestricted and are rejected before
+sampling. The other three priors require \code{fixed = list(df = ...)};
+their propriety checks account for the largest number of repeated observations
+and the fixed value of \code{df}. The generic label
 \code{"reference"} is used only where its parameter ordering is unambiguous.
 For Gamma and Exponential-Logarithmic models, the parameter of interest is
 therefore stated in the label. Unsupported combinations, including objective

@@ -1,3 +1,15 @@
+# fitdistrBayes 0.2.3
+
+- Reject tied observations for the Student-t model with unknown degrees of
+  freedom under the independence Jeffreys prior. Such samples have an improper
+  posterior because the prior gives positive mass to degrees of freedom for
+  which the location-scale posterior is not integrable near zero scale.
+- Document the pairwise-distinct sample requirement in the help page and public
+  catalogue, and add regression tests for tied and distinct observations.
+- The fixed-degree-of-freedom Student-t routes retain their existing,
+  multiplicity-dependent propriety conditions. Sampling algorithms and the
+  remaining model-prior routes are unchanged.
+
 # fitdistrBayes 0.2.2
 
 - Added the weighted Lindley distribution with Fisher-information Jeffreys,

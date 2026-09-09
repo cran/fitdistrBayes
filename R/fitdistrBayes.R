@@ -936,7 +936,7 @@
          c("exact Beta posterior", "exact Beta posterior", "univariate slice sampling"),
          "n >= 1; nonnegative integer x"),
     rows("gumbel", c("jeffreys", "reference", "mdi"), "location, scale", "none",
-         "adaptive Metropolis", "n >= 2; nonconstant sample"),
+         "adaptive Metropolis", "n >= 2; pairwise distinct observations"),
     rows("lognormal", c("jeffreys", "reference"), "meanlog, sdlog", "none",
          "exact Normal-inverse-Gamma posterior",
          "n >= 2; x > 0; nonconstant log(x)"),
@@ -2954,8 +2954,12 @@ fitdistrBayes_routes <- function(model = NULL) {
       .fdb_stop("Unknown-df Student-t reference priors are not yet in the certified full-joint registry. Fix df or use 'independence-jeffreys'.")
     }
     require_prior("independence-jeffreys", "Student-t with unknown df")
-    if (n <= 1L || !.fdb_nonconstant(x)) {
-      .fdb_stop("Unknown-df Student-t independence Jeffreys requires n > 1 and a nondegenerate sample.")
+    if (n <= 1L || anyDuplicated(x) > 0L) {
+      .fdb_stop(paste0(
+        "Unknown-df Student-t independence Jeffreys requires n > 1 and ",
+        "pairwise distinct observations (a nondegenerate sample without ties). ",
+        "Tied observations give an improper posterior when df is unrestricted."
+      ))
     }
     classical <- .fdb_student_start(x)
     sv <- resolve_start(classical$values,
@@ -2987,7 +2991,7 @@ fitdistrBayes_routes <- function(model = NULL) {
       sampler = sampler, parameters = c("location", "scale", "df"),
       prior_label = "independence Jeffreys",
       prior_kernel = "scale^(-1)*sqrt(df*B(df)/(df+3))",
-      propriety = "proper for intercept-only model with n > 1 outside degenerate samples; positive df moments do not exist",
+      propriety = "proper for intercept-only model with n > 1 and pairwise distinct observations; positive integer df moments do not exist",
       loglik = loglik, rng = rng, fixed = fixed
     ))
   }
@@ -3490,7 +3494,7 @@ fitdistrBayes_routes <- function(model = NULL) {
 #' @param x Numeric vector of observations.
 #' @param distr A recognized distribution name (case-insensitive), a density
 #'   function whose first argument is the observation vector, or an object made
-#'   by [fitdistrBayes_model()]. Version 0.2.2
+#'   by [fitdistrBayes_model()]. The package
 #'   includes 20 built-in distributions, including Gumbel, Frechet, Lomax,
 #'   Nakagami-m, Exponential-Logarithmic, Rician, and weighted Lindley.
 #' @param prior An objective-prior name or, for a custom density function, a

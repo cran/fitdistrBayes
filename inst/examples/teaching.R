@@ -1,4 +1,4 @@
-# fitdistrBayes 0.2.2: newer built-in models
+# fitdistrBayes: newer built-in models
 # Run one section at a time. Results are printed in the console only.
 
 library(fitdistrBayes)

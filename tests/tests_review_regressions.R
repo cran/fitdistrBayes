@@ -13,6 +13,30 @@ expect_error <- function(expr, pattern) {
 ctrl <- list(rhat_threshold = 10, ess_threshold = 1,
              warn_convergence = FALSE)
 
+# Unknown-df Student-t: any exact tie produces a nonintegrable zero-scale
+# boundary for an interval of df values with positive independence-prior mass.
+for (x_tied in list(c(0, 0, 1), c(0, 1, 1, 2), c(1, 0, 0), rep(1, 3))) {
+  expect_error(
+    fitdistrBayes(x_tied, "t", "independence-jeffreys",
+                  iter = 100, warmup = 50, chains = 1, seed = 91,
+                  control = ctrl),
+    "pairwise distinct"
+  )
+}
+fit_distinct_t <- fitdistrBayes(
+  c(-2, -0.1, 0, 0.1, 2), "t", "independence-jeffreys",
+  iter = 120, warmup = 60, chains = 2, seed = 92, control = ctrl
+)
+assert(inherits(fit_distinct_t, "fitdistrBayes"),
+       "A pairwise distinct Student-t sample was rejected.")
+# Fixed df can give a proper posterior even when the observations include ties.
+fit_fixed_t <- fitdistrBayes(
+  c(0, 0, 1), "t", "reference", fixed = list(df = 4),
+  iter = 120, warmup = 60, chains = 2, seed = 93, control = ctrl
+)
+assert(inherits(fit_fixed_t, "fitdistrBayes"),
+       "A proper fixed-df Student-t posterior with ties was rejected.")
+
 # Constant positive Nakagami-m samples have improper marginal shape tails.
 for (prior in c("jeffreys", "reference")) {
   expect_error(
