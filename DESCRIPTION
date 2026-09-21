@@ -1,7 +1,7 @@
 Package: fitdistrBayes
 Type: Package
 Title: Objective Bayesian Distribution Fitting
-Version: 0.2.3
+Version: 0.5.0
 Authors@R: person("Pedro Luiz", "Ramos", role = c("aut", "cre", "cph"),
     email = "pedro.ramos@uc.cl")
 Description: Fits common univariate distributions using registered objective
@@ -11,17 +11,21 @@ Description: Fits common univariate distributions using registered objective
     moment conditions are checked before computation when registered or supplied.
     Exact simulation, marginalization, slice sampling, adaptive Metropolis, and
     user-supplied posterior samplers share a common interface for summaries,
-    diagnostics, prediction, and pointwise log-likelihood evaluation. The
-    reference-prior framework follows Bernardo (1979)
+    diagnostics, prediction, and pointwise log-likelihood evaluation.
+    A separate interface fits independently right-censored observations using
+    the registered complete-data priors, observed-data likelihood sampling or
+    data augmentation, with sufficient posterior-propriety checks. Optional
+    post-processing provides WAIC, PSIS-LOO, and DIC for observed-data likelihoods.
+    The reference-prior framework follows Bernardo (1979)
     <doi:10.1111/j.2517-6161.1979.tb01066.x>.
 License: GPL-3
 Encoding: UTF-8
 Language: en-US
 Depends: R (>= 4.1.0)
-Suggests: posterior
+Suggests: posterior, loo (>= 2.7.0)
 NeedsCompilation: no
 Author: Pedro Luiz Ramos [aut, cre, cph]
 Maintainer: Pedro Luiz Ramos <pedro.ramos@uc.cl>
-Packaged: 2026-09-07 00:07:22 UTC; CodexSandboxOffline
+Packaged: 2026-09-16 01:13:00 UTC; CodexSandboxOffline
 Repository: CRAN
-Date/Publication: 2026-09-09 14:20:02 UTC
+Date/Publication: 2026-09-21 10:00:12 UTC

@@ -29,7 +29,9 @@ log_lik(object, ...)
 \method{log_lik}{fitdistrBayes}(object, draws = NULL, seed = NULL, ...)
 }
 \arguments{
-  \item{x, object}{A fitted \code{"fitdistrBayes"} object.}
+  \item{x, object}{A fitted \code{"fitdistrBayes"} object. The
+  \code{log_lik} generic also accepts \code{"fitcensBayes"} objects;
+  see \code{\link{fitcensBayes-methods}} for their separate methods.}
   \item{digits}{Number of printed significant digits.}
   \item{parm}{Parameter names for interval extraction.}
   \item{level}{Credible level.}

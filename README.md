@@ -1,6 +1,6 @@
 # fitdistrBayes
 
-`fitdistrBayes` 0.2.3 fits common univariate distributions under registered
+`fitdistrBayes` 0.5.0 fits common univariate distributions under registered
 objective Bayesian priors through a deliberately small interface:
 
 ```r
@@ -17,9 +17,78 @@ exist, so a finite chain is not used to justify a divergent moment.
 Install the source archive supplied with this research release and load it:
 
 ```r
-install.packages("fitdistrBayes_0.2.3.tar.gz", repos = NULL,
+install.packages("fitdistrBayes_0.5.0.tar.gz", repos = NULL,
                  type = "source")
 library(fitdistrBayes)
+```
+
+## Optional model comparison
+
+Both fitting functions default to `criteria = FALSE`: no additional likelihood
+matrix or information criterion is computed. Existing R-hat/ESS diagnostics
+are independent of this option. Use `criteria = TRUE` to compute all criteria
+after sampling, or choose `criteria = c("waic", "dic")` without extra dependencies.
+PSIS-LOO requires the optional `loo` package. The fitting chains are unchanged.
+
+```r
+set.seed(20)
+x <- rexp(60)
+fit <- fitdistrBayes(x, "exponential", "reference", seed = 21,
+                    criteria = c("waic", "dic"))
+fit$criteria
+WAIC(fit)                       # May also be computed later
+# install.packages("loo")       # Once, if PSIS-LOO is desired
+# LOOIC(fit)
+```
+
+The same functions accept `fitcensBayes` fits and use log survival for censored
+observations, never imputed-data densities. DIC is unavailable if necessary
+posterior means are not certified finite. LOO is withheld if a training posterior
+is not certified proper. Inspect diagnostic warnings before model comparison.
+`compare_models()` requires the same observations, censoring status, and scale.
+See `help("criteria")` for definitions, output components, and limitations.
+
+## Independent right censoring
+
+The separate function `fitcensBayes(x, status, distr, prior)` uses `status = 1`
+for exact observations and `status = 0` for the strict event `T > x`.
+For discrete distributions this distinction is important: a record meaning
+`T >= 3` must be supplied as `x = 2, status = 0`.
+
+```r
+set.seed(20)
+lifetime <- rexp(80, rate = 0.7)
+censoring <- rexp(80, rate = 0.3)
+x <- pmin(lifetime, censoring)
+status <- as.integer(lifetime <= censoring)
+fit <- fitcensBayes(x, status, "exponential", "reference", seed = 21)
+summary(fit)
+confint(fit)
+predict(fit, type = "survival", times = c(1, 2, 3), draws = 5)
+log_lik(fit, draws = 5)
+```
+
+The catalogue `fitcensBayes_models()` lists 56 registered model-prior routes
+for 20 distributions. The priors are inherited from the **complete-data model**;
+they are not claimed to be Jeffreys or reference priors rederived for a
+particular censoring design. Posterior propriety is certified by sufficient
+conditions on the exact-event subset, with an additional analytic Exponential
+case. An uncertified case is rejected before sampling. Imputed observations
+are never used to satisfy these conditions.
+
+`method = "auto"` uses the observed likelihood when censoring is present;
+`method = "augmentation"` alternates truncated lifetime simulation with
+parameter updates. Without censoring, `method = "auto"` uses the original
+complete-data sampler. Posterior medians, credible intervals, rank-based
+diagnostics and justified moment summaries are returned. Heavy censoring may
+require substantially longer chains. A diagnostic pass is not a convergence
+proof. Densities or priors defined by the user remain available through the
+original `fitdistrBayes()` interface, but not the new censored interface.
+
+See `help("fitcensBayes")` and the installed English tutorial:
+
+```r
+system.file("examples", "tutorial_fitcensBayes.R", package = "fitdistrBayes")
 ```
 
 ## Quick start

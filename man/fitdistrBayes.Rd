@@ -5,7 +5,7 @@
 fitdistrBayes(x, distr, prior = NULL, start = NULL, fixed = NULL,
   iter = 4000L, warmup = floor(iter / 2), thin = 1L,
   chains = 4L, seed = NULL, na.action = c("fail", "omit"),
-  control = list(), ...)
+  control = list(), ..., criteria = FALSE)
 }
 \arguments{
   \item{x}{Numeric vector of observations.}
@@ -34,7 +34,12 @@ fitdistrBayes(x, distr, prior = NULL, start = NULL, fixed = NULL,
   \item{control}{Named list of computational, diagnostic, storage, and custom
   model controls described in Details.}
   \item{...}{Additional fixed arguments forwarded to a custom density and
-  predictive generator.}
+  predictive generator. Unused arguments are errors for built-in distributions.}
+  \item{criteria}{Optional post-processing: \code{FALSE} (default) does no
+  information-criterion computation; \code{TRUE} requests WAIC, PSIS-LOO,
+  and DIC. A character vector selects \code{"waic"}, \code{"looic"}, or
+  \code{"dic"}. Must be named in full. PSIS-LOO requires the optional
+  \pkg{loo} package. See \code{\link{criteria}} for assumptions and diagnostics.}
 }
 \value{
 An object of class \code{"fitdistrBayes"}. It is a list with the following
@@ -62,7 +67,10 @@ principal components:
   corresponding analytical condition.}
   \item{\code{diagnostics}}{A list containing the overall convergence
   decision, thresholds, extrema of \eqn{\widehat R} and effective sample
-  sizes, acceptance information when applicable, and explanatory messages.}
+  sizes, acceptance information when applicable, and explanatory messages.
+  A non-moving MCMC chain sets \eqn{\widehat R} to \code{Inf} and ESS to
+  zero for the affected parameter; it cannot certify convergence.
+  Independent exact draws do not require MCMC convergence diagnostics.}
   \item{\code{capabilities}}{Logical indicators describing whether prediction
   and pointwise log-likelihood evaluation are available.}
   \item{\code{chains}}{A list of posterior-draw matrices, one matrix per
@@ -71,8 +79,11 @@ principal components:
   \code{.chain}, \code{.iteration}, and \code{.draw} identify each draw and
   the remaining columns contain parameter values.}
   \item{\code{data}, \code{omitted}, \code{control}}{The analyzed data, the
-  number of omitted missing observations, and the validated computational
+  original indices of omitted missing observations, and the validated computational
   controls.}
+  \item{\code{criteria}}{Present only when requested: an object of class
+  \code{"fitdistrBayes_criteria"}. Computed after sampling, without
+  changing the chains. Criteria can also be computed later from the fit.}
 }
 Density and random-generation closures are retained internally by default to
 support \code{log_lik()} and \code{predict()}; they are omitted when
@@ -177,7 +188,8 @@ such as \code{"log-normal"}, \code{"negative binomial"}, \code{"student-t"},
  \tab  \tab \code{independence-jeffreys} \cr
 \code{weibull} \tab \code{shape, scale} \tab \code{jeffreys, reference} \cr
 \code{weighted lindley} \tab \code{lambda, phi} \tab \code{jeffreys, reference, first-rule} \cr
- \tab  \tab \code{independence-jeffreys, reference-lambda, reference-phi}
+ \tab  \tab \code{independence-jeffreys} \cr
+ \tab  \tab \code{reference-lambda, reference-phi}
 }
 
 For Student t, \code{independence-jeffreys} estimates \code{df} and requires
@@ -279,6 +291,10 @@ Mota AL, Ramos PL, Ferreira PH, Tomazella VLD, Louzada F (2021).
 ``A reparameterized weighted Lindley distribution: Properties, estimation
 and applications.'' \emph{Revista Colombiana de Estadistica}, 44(1), 65--90.
 \doi{10.15446/rce.v44n1.86566}.
+}
+\seealso{
+\code{\link{fitcensBayes}} provides a separate interface for independently
+right-censored observations using the registered complete-data priors.
 }
 \examples{
 # A first exact-posterior example.

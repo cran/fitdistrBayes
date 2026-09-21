@@ -130,7 +130,7 @@
 }
 
 .fdb_validate_x <- function(x, na.action) {
-  if (!is.numeric(x) || is.complex(x) || is.matrix(x) ||
+  if (!is.numeric(x) || is.complex(x) || !is.null(dim(x)) ||
       is.data.frame(x)) {
     .fdb_stop("'x' must be a numeric vector.")
   }
@@ -706,7 +706,20 @@
   linear <- phi * (mu - 1)
   constant <- phi * (phi + 1)
   discriminant <- linear^2 + 4 * mu * constant
-  if (!is.finite(discriminant) || discriminant <= 0) return(NA_real_)
+  if (!is.finite(discriminant) || discriminant <= 0) {
+    # The positive root can be representable even when the discriminant is
+    # not. Preserve the original arithmetic on its safe range; evaluate only
+    # the exceptional range on the log scale, without changing the model.
+    log_constant <- log(phi) + log1p(phi)
+    log_abs_linear <- log(phi) + if (mu >= 1) log(mu - 1) else log1p(-mu)
+    log_root <- .fdb_logsumexp(c(2 * log_abs_linear,
+                                log(4) + log(mu) + log_constant)) / 2
+    log_sum <- .fdb_logsumexp(c(log_root, log_abs_linear))
+    log_lambda <- if (mu >= 1) log(2) + log_constant - log_sum else
+      log_sum - log(2) - log(mu)
+    lambda <- exp(log_lambda)
+    return(if (is.finite(lambda) && lambda > 0) lambda else NA_real_)
+  }
   root <- sqrt(discriminant)
   lambda <- if (linear >= 0) {
     2 * constant / (root + linear)
@@ -1444,6 +1457,19 @@ fitdistrBayes_routes <- function(model = NULL) {
   max(.fdb_basic_rhat(z), .fdb_basic_rhat(folded))
 }
 
+.fdb_stable_sd <- function(x) {
+  ans <- stats::sd(x)
+  if ((is.finite(ans) && ans > 0) || !length(x) || any(!is.finite(x)) ||
+      !any(x != x[1L])) return(ans)
+  centered <- x - mean(x)
+  if (all(is.finite(centered))) {
+    scale <- max(abs(centered))
+    return(stats::sd(centered / scale) * scale)
+  }
+  scale <- max(abs(x))
+  stats::sd(x / scale) * scale
+}
+
 .fdb_ess_matrix <- function(x) {
   if (is.null(x)) return(NA_real_)
   n <- nrow(x)
@@ -1452,6 +1478,17 @@ fitdistrBayes_routes <- function(model = NULL) {
   between <- stats::var(colMeans(x))
   scale <- max(1, mean(x^2))
   tolerance <- 100 * .Machine$double.eps * scale
+  if ((!is.finite(W) || !is.finite(between) ||
+       (W <= tolerance && between <= tolerance)) &&
+      all(is.finite(x)) && any(x != x[1L])) {
+    centered <- x - mean(x)
+    if (all(is.finite(centered))) {
+      scaled <- centered / max(abs(centered))
+    } else {
+      scaled <- x / max(abs(x)); scaled <- scaled - mean(scaled)
+    }
+    return(.fdb_ess_matrix(scaled))
+  }
   if (!is.finite(W) || !is.finite(between)) return(NA_real_)
   if (W <= tolerance) {
     return(if (between <= tolerance) n * m else 0)
@@ -1520,8 +1557,12 @@ fitdistrBayes_routes <- function(model = NULL) {
       ess_mean <- .fdb_ess_matrix(split)
       ess_bulk <- .fdb_ess(split, "bulk")
       ess_tail <- .fdb_ess(split, "tail")
+      if (any(vapply(chains, function(ch) !any(ch[, j] != ch[1L, j]), logical(1)))) {
+        rhat <- Inf
+        ess_mean <- ess_bulk <- ess_tail <- 0
+      }
     }
-    sdev <- stats::sd(values)
+    sdev <- .fdb_stable_sd(values)
     data.frame(
       parameter = parameters[j],
       mean = mean(values),
@@ -1532,7 +1573,7 @@ fitdistrBayes_routes <- function(model = NULL) {
       q25 = q[2],
       q75 = q[4],
       q97.5 = q[5],
-      mcse_mean = sdev / sqrt(ess_mean),
+      mcse_mean = if (is.finite(ess_mean) && ess_mean > 0) sdev / sqrt(ess_mean) else NA_real_,
       rhat = rhat,
       ess_mean = ess_mean,
       ess_bulk = ess_bulk,
@@ -2373,9 +2414,9 @@ fitdistrBayes_routes <- function(model = NULL) {
     S <- sum(x)
     if (prior != "mdi") {
       draw_chain <- function(n_save) {
-        probability <- .fdb_open_probability(
-          stats::rbeta(n_save, n, S + 0.5)
-        )
+        probability <- stats::rbeta(n_save, n, S + 0.5)
+        if (any(!is.finite(probability) | probability <= 0 | probability >= 1))
+          .fdb_stop("A Beta posterior draw reached a nonrepresentable probability boundary; no clipping or resampling was applied.")
         ans <- matrix(probability, ncol = 1L)
         colnames(ans) <- "prob"
         ans
@@ -3092,6 +3133,9 @@ fitdistrBayes_routes <- function(model = NULL) {
     mean_start <- phi_start * (lambda_start + phi_start + 1) /
       (lambda_start * (lambda_start + phi_start))
     init <- c(log_mean = log(mean_start), log_phi = log(phi_start))
+    if (!is.finite(init[1L])) init[1L] <- log(phi_start) +
+      .fdb_logsumexp(c(log(lambda_start), log(phi_start), 0)) - log(lambda_start) -
+      .fdb_logsumexp(c(log(lambda_start), log(phi_start)))
     logpost <- function(u) {
       if (length(u) != 2L || any(!is.finite(u))) return(-Inf)
       log_mean <- u[1L]
@@ -3521,7 +3565,7 @@ fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
                           iter = 4000L, warmup = floor(iter / 2),
                           thin = 1L, chains = 4L, seed = NULL,
                           na.action = c("fail", "omit"),
-                          control = list(), ...) {
+                          control = list(), ..., criteria = FALSE) {
   call <- match.call()
   na.action <- match.arg(na.action)
   iter <- .fdb_scalar_count(iter, "iter", lower = 20L)
@@ -3536,6 +3580,7 @@ fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
   }
 
   control <- .fdb_merge_control(control)
+  if (!identical(criteria, FALSE)) .fdb_criteria_preflight(criteria, control)
   validated <- .fdb_validate_x(x, na.action)
   x_used <- validated$x
   dots <- list(...)
@@ -3543,6 +3588,13 @@ fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
   model_spec <- inherits(distr, "fitdistrBayes_model")
   custom_density <- is.function(distr)
   custom <- model_spec || custom_density
+  if (!custom && length(dots)) {
+    labels <- names(dots)
+    if (is.null(labels)) labels <- rep("", length(dots))
+    labels[!nzchar(labels)] <- paste0("..", which(!nzchar(labels)))
+    .fdb_stop("Unused arguments for a built-in distribution: %s. Use 'fixed' for fixed parameters and 'criteria' for optional information criteria.",
+              paste(labels, collapse = ", "))
+  }
   if (!custom && (!is.character(distr) || length(distr) != 1L ||
                   is.na(distr) || !nzchar(trimws(distr)))) {
     .fdb_stop("'distr' must be one recognized character string or a density function.")
@@ -3766,6 +3818,9 @@ fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
     answer$.rng <- built$rng
   }
   class(answer) <- "fitdistrBayes"
+  if (!identical(criteria, FALSE)) {
+    answer$criteria <- .fdb_criteria_after_fit(answer, criteria)
+  }
 
   if (!converged && isTRUE(control$warn_convergence)) {
     .fdb_warn(

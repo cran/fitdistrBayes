@@ -1,3 +1,45 @@
+# fitdistrBayes 0.5.0
+
+- Harden the pre-release numerical audit: use exceptional-range log-scale
+  fallbacks for the weighted Lindley mean inversion and censored transforms;
+  avoid rounding a positive beta shape to zero; stabilize SD and mean ESS
+  under changes of units; flag non-moving MCMC chains explicitly.
+- Handle sure censoring events at zero analytically in PSIS-LOO instead of
+  fitting degenerate Pareto tails. Guard aggregate criterion/SE overflow,
+  withhold DIC when the likelihood at the posterior mean is undefined, and
+  retain completed posterior draws if optional post-processing fails.
+- Add permanent regression tests for these audit findings. Priors and
+  sampling algorithms are unchanged; ordinary-range regression outputs
+  remain identical for all 56 complete-data model-prior routes.
+- Reject unused built-in fitting arguments and non-vector/complex data rather
+  than silently ignoring arguments or flattening arrays. Do not clip boundary
+  Beta draws in the complete-data geometric posterior sampler.
+- Add opt-in criteria = FALSE to both fitting interfaces. TRUE computes
+  WAIC, PSIS-LOO, and DIC after sampling; character vectors select a subset.
+  Add criteria(), WAIC(), LOOIC(), DIC(), and compare_models(). Default
+  fitting does not evaluate additional likelihoods or load 'loo'.
+- Use the observed likelihood under censoring, guard leave-one-out posterior
+  propriety, respect certified parameter moments for DIC, and report
+  pointwise diagnostics and paired comparison uncertainty. PSIS-LOO uses
+  the optional 'loo' package; WAIC and DIC need no additional dependency.
+- Add the separate function fitcensBayes(x, status, distr, prior) for
+  independent right censoring, with status 1 for exact events and status 0
+  for strictly greater lifetimes, including discrete distributions.
+- Support the 20 registered distributions and 56 complete-data model-prior
+  routes. These priors are reused, not rederived for a censoring design.
+  Check sufficient posterior-propriety conditions on the exact-event subset
+  before sampling; handle the Exponential posterior analytically.
+- Add exact censored Gamma and Beta posteriors where available, collapsed
+  Weibull sampling, observed-likelihood slice sampling, and optional data
+  augmentation with truncated lifetimes. Improve numerical evaluation of
+  extreme Rician tails in the new censored interface.
+- Add the fitcensBayes class, posterior summaries and diagnostics, survival
+  prediction, imputation, and observed pointwise log-likelihood extraction.
+  Only certified posterior moments are reported.
+- Add fitcensBayes_models(), help pages, examples and regression tests.
+- Preserve sampling algorithms and ordinary-range regression results; the new
+  criteria argument is named-only to preserve existing positional calls.
+
 # fitdistrBayes 0.2.3
 
 - Reject tied observations for the Student-t model with unknown degrees of

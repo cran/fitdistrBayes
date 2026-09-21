@@ -84,11 +84,18 @@ the package's validation, summaries, diagnostics, prediction, and pointwise
 log-likelihood interface.
 
 A custom \code{sampler} receives the subset of its formal arguments matching
-\code{x}, \code{log_posterior}, \code{log_posterior_unconstrained},
-\code{start}, \code{fixed}, \code{lower}, \code{upper},
-\code{to_unconstrained}, \code{from_unconstrained}, \code{iter},
-\code{warmup}, \code{thin}, \code{chains}, \code{n_save}, \code{control}, and
-\code{dots}. It returns either one matrix when a single chain was requested, a
+the following names:
+\itemize{
+\item Data and parameters: \code{x}, \code{start}, \code{fixed},
+\code{lower}, and \code{upper}.
+\item Posterior evaluation: \code{log_posterior} and
+\code{log_posterior_unconstrained}.
+\item Parameter transformations: \code{to_unconstrained} and
+\code{from_unconstrained}.
+\item Sampling controls: \code{iter}, \code{warmup}, \code{thin},
+\code{chains}, \code{n_save}, \code{control}, and \code{dots}.
+}
+It returns either one matrix when a single chain was requested, a
 list of chain matrices, or a list containing a \code{chains} component and
 optional \code{independent}, \code{engine}, acceptance, and initialization
 components. Chain matrices are on the natural parameter scale, have
