@@ -84,14 +84,28 @@
        omitted = as.integer(object$omitted), measure = measure)
 }
 
+.fdb_ic_sd <- function(x) {
+  if (length(x) < 2L || any(!is.finite(x))) return(NA_real_)
+  # stats::var() can overflow while summing a large constant column on R
+  # builds without long double. Center first (also preserving small deviations
+  # from a large offset), then bound the inputs to var() by one in magnitude.
+  centered <- x - x[1L]
+  if (all(is.finite(centered))) {
+    scale <- max(abs(centered))
+    if (scale == 0) return(0)
+    standardized <- centered / scale
+  } else {
+    # Opposite-sign finite extremes can overflow during subtraction itself.
+    scale <- max(abs(x))
+    standardized <- x / scale
+  }
+  sqrt(stats::var(standardized)) * scale
+}
+
+.fdb_ic_variance <- function(x) .fdb_ic_sd(x)^2
+
 .fdb_ic_se <- function(pointwise) {
-  if (length(pointwise) < 2L) return(NA_real_)
-  se <- sqrt(length(pointwise) * stats::var(pointwise))
-  if ((is.finite(se) && (se > 0 || all(pointwise == pointwise[1L]))) ||
-      any(!is.finite(pointwise))) return(se)
-  scale <- max(abs(pointwise))
-  if (scale == 0) return(0)
-  sqrt(length(pointwise) * stats::var(pointwise / scale)) * scale
+  sqrt(length(pointwise)) * .fdb_ic_sd(pointwise)
 }
 
 # Censoring at the lower endpoint of a positive continuous distribution is
@@ -204,15 +218,24 @@
   if ("waic" %in% methods) {
     maxima <- apply(ll, 2L, max)
     lppd <- maxima + log(colMeans(exp(sweep(ll, 2L, maxima, "-"))))
-    penalty <- apply(ll, 2L, stats::var)
+    penalty <- apply(ll, 2L, .fdb_ic_variance)
     pw <- cbind(elpd_waic = lppd - penalty, p_waic = penalty, waic = -2 * (lppd - penalty))
-    if (any(!is.finite(pw))) stop("WAIC arithmetic exceeded the numerical range.", call. = FALSE)
     bad <- which(penalty > 0.4)
-    if (length(bad)) issue("Some pointwise p_waic values exceed 0.4; WAIC may be unreliable. Inspect PSIS-LOO diagnostics.")
-    details$waic <- list(pointwise = pw, high_p_waic = bad)
-    rows$waic <- row("waic", sum(pw[, "waic"]), .fdb_ic_se(pw[, "waic"]), sum(penalty),
-      sum(pw[, "elpd_waic"]), isTRUE(object$diagnostics$converged) && !length(bad),
-      if (length(bad)) "Pointwise p_waic > 0.4." else "")
+    outside <- which(rowSums(!is.finite(pw)) > 0L)
+    if (length(outside)) {
+      reason <- "WAIC pointwise arithmetic exceeded the numerical range; no numeric score was returned."
+      issue(reason)
+      pw[!is.finite(pw)] <- NA_real_
+      details$waic <- list(pointwise = pw, high_p_waic = bad,
+                          unrepresentable_observations = outside)
+      rows$waic <- row("waic", reason = reason)
+    } else {
+      if (length(bad)) issue("Some pointwise p_waic values exceed 0.4; WAIC may be unreliable. Inspect PSIS-LOO diagnostics.")
+      details$waic <- list(pointwise = pw, high_p_waic = bad)
+      rows$waic <- row("waic", sum(pw[, "waic"]), .fdb_ic_se(pw[, "waic"]), sum(penalty),
+        sum(pw[, "elpd_waic"]), isTRUE(object$diagnostics$converged) && !length(bad),
+        if (length(bad)) "Pointwise p_waic > 0.4." else "")
+    }
   }
   if ("looic" %in% methods) {
     if (!all(guard$certified)) {

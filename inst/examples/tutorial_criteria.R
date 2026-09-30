@@ -1,4 +1,4 @@
-# fitdistrBayes 0.5.0 -- optional Bayesian model comparison
+# fitdistrBayes 0.5.1 -- optional Bayesian model comparison
 # Run section by section. Results are printed in the console; no files are saved.
 library(fitdistrBayes)
 packageVersion("fitdistrBayes")

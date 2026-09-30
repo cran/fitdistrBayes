@@ -1,6 +1,6 @@
 # fitdistrBayes
 
-`fitdistrBayes` 0.5.0 fits common univariate distributions under registered
+`fitdistrBayes` 0.5.1 fits common univariate distributions under registered
 objective Bayesian priors through a deliberately small interface:
 
 ```r
@@ -17,7 +17,7 @@ exist, so a finite chain is not used to justify a divergent moment.
 Install the source archive supplied with this research release and load it:
 
 ```r
-install.packages("fitdistrBayes_0.5.0.tar.gz", repos = NULL,
+install.packages("fitdistrBayes_0.5.1.tar.gz", repos = NULL,
                  type = "source")
 library(fitdistrBayes)
 ```

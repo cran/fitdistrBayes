@@ -1,5 +1,5 @@
 # fitcensBayes: run one block at a time in the console.
-# Install fitdistrBayes 0.5.0 first. This tutorial does not install anything
+# Install fitdistrBayes 0.5.1 first. This tutorial does not install anything
 # and does not save outputs. Long MCMC examples are opt-in, not help examples.
 # status = 1: exact event; status = 0: strictly T > x, also for counts.
 # The first example uses random independent censoring; the others use fixed

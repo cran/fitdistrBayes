@@ -1,3 +1,16 @@
+# fitdistrBayes 0.5.1
+
+- Fix WAIC portability on macOS ARM and R builds without extended-precision
+  long double arithmetic. Center and scale log-likelihood contributions before
+  computing their dispersion, avoiding overflow in intermediate sums.
+- Use the same stable dispersion calculation for paired information-criterion
+  standard errors. Return an explicitly unavailable WAIC when finite inputs
+  produce pointwise or aggregate scores outside the representable range.
+- Retain the extreme-value regression that exposed the problem, and add tests
+  for double-only arithmetic, large constant offsets, genuine overflow and
+  agreement with ordinary-range WAIC calculations. Priors and posterior
+  sampling code are unchanged from 0.5.0.
+
 # fitdistrBayes 0.5.0
 
 - Harden the pre-release numerical audit: use exceptional-range log-scale

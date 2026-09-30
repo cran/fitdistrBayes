@@ -62,7 +62,9 @@ the fitting functions retain the fitted object and chains, issue a warning,
 and mark the requested criteria unavailable. The error is recorded in
 \code{fit$criteria$diagnostics$computation_error}. Direct calls to
 \code{criteria()} still report invalid likelihood matrices as errors.
-Numerically unrepresentable aggregate scores are never labelled reliable.
+If finite log-likelihood inputs lead to numerically unrepresentable pointwise
+WAIC components or aggregate scores, the affected criterion is returned as
+\code{NA}, with a warning and explanation, and is never labelled reliable.
 
 For exact observations, \eqn{l_{si}=\log f(x_i\mid\theta_s)}. For censored
 observations, \eqn{l_{si}=\log S(x_i\mid\theta_s)} instead. The censoring
@@ -75,7 +77,9 @@ WAIC uses
 \deqn{p_{WAIC}=\sum_i \mathrm{Var}_s(l_{si}),\qquad
  WAIC=-2\sum_i\left[\log\left(S^{-1}\sum_s e^{l_{si}}\right)
                          -\mathrm{Var}_s(l_{si})\right].}
-The variance uses denominator \eqn{S-1}. Pointwise variances above 0.4
+The variance uses denominator \eqn{S-1}. Centering and scaling avoid
+intermediate overflow without requiring extended floating-point precision.
+Pointwise variances above 0.4
 produce a warning. PSIS-LOO uses \code{loo::loo}, with chain-aware relative
 effective sample sizes (one for independent exact draws). Its result includes
 Pareto-k and effective-sample-size diagnostics. The diagnostic threshold is
@@ -137,7 +141,9 @@ class \code{"fitdistrBayes_criteria"}, with:
   flag only means the implemented diagnostic checks passed, not a guarantee.
   Scores from custom fits without a posterior-propriety declaration are
   not labelled reliable.}
-  \item{\code{details}}{Pointwise WAIC components; the native \code{psis_loo}
+  \item{\code{details}}{Pointwise WAIC components (unrepresentable components
+  are \code{NA}, with observation indices in
+  \code{waic$unrepresentable_observations}); the native \code{psis_loo}
   result (extended with analytic zero-information rows when necessary),
   relative efficiencies and Pareto diagnostics; and DIC components
   with the posterior-mean parameter vector, as applicable.}
