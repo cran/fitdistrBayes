@@ -2,6 +2,7 @@ library(fitdistrBayes)
 E <- asNamespace("fitdistrBayes")
 control_quiet <- list(warn_convergence = FALSE)
 fixtures <- list(
+  dhillon = c(beta = 3, theta = 2),
   beta = c(shape1 = 2, shape2 = 5),
   cauchy = c(location = 1, scale = 0.7),
   `chi-squared` = c(df = 4),

@@ -18,7 +18,7 @@ for (r in seq_len(nrow(routes))) {
   imp <- predict(fit, type = "impute", draws = 2, seed = 42)
   stopifnot(all(sweep(imp, 2, d$x[d$status == 0], "-") > 0))
 }
-cat("PASS: all 56 censored routes and registered extraction/prediction methods.\n")
+cat("PASS: all 59 censored routes and registered extraction/prediction methods.\n")
 
 # Each model also exercises its augmentation route; no convergence claim.
 for (model in names(fixtures)) {
@@ -31,7 +31,7 @@ for (model in names(fixtures)) {
     control = control_quiet)
   stopifnot(all(is.finite(as.matrix(fit$draws[, fit$model$parameters, drop = FALSE]))))
 }
-cat("PASS: all 20 augmentation model routes.\n")
+cat("PASS: all 21 augmentation model routes.\n")
 
 # Independent exact-posterior checks.
 x <- c(0.3, 0.7, 1.2, 1.5, 2)

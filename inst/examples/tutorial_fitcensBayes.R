@@ -1,5 +1,5 @@
 # fitcensBayes: run one block at a time in the console.
-# Install fitdistrBayes 0.5.1 first. This tutorial does not install anything
+# Install fitdistrBayes 0.6.0 first. This tutorial does not install anything
 # and does not save outputs. Long MCMC examples are opt-in, not help examples.
 # status = 1: exact event; status = 0: strictly T > x, also for counts.
 # The first example uses random independent censoring; the others use fixed
@@ -9,10 +9,22 @@
 # Missing mean/SD entries indicate infinite or uncertified posterior moments.
 # coef() returns medians; confint() returns equal-tail credible intervals.
 # If diagnostics fail, increase iterations and inspect trace/ACF plots.
-# Twenty distributions and all 56 registered model-prior routes are shown;
+# Twenty-one distributions and all 59 registered model-prior routes are shown;
 # two additional calls illustrate data augmentation.
 
 library(fitdistrBayes)
+
+# Dhillon: the three registered priors, grouped on the same censored data.
+set.seed(121)
+dhillon_lifetime <- exp((rlogis(100) - log(2)) / 3)
+dhillon_x <- pmin(dhillon_lifetime, 1)
+dhillon_status <- as.integer(dhillon_lifetime <= 1)
+dhillon_J <- fitcensBayes(dhillon_x, dhillon_status, "dhillon", "jeffreys", seed=21)
+dhillon_Rb <- fitcensBayes(dhillon_x, dhillon_status, "dhillon", "reference-beta", seed=21)
+dhillon_Rt <- fitcensBayes(dhillon_x, dhillon_status, "dhillon", "reference-theta", seed=22)
+print(list(Jeffreys=dhillon_J, Reference_beta=dhillon_Rb, Reference_theta=dhillon_Rt))
+# Predictive lifetime means are infinite; use quantiles or survival instead.
+dhillon_J$predictive_moments
 
 set.seed(101)
 lifetime <- rexp(150, rate = 0.7)

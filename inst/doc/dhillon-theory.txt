@@ -1,0 +1,123 @@
+DHILLON: OBSERVED-DATA POSTERIOR CONDITIONS
+fitdistrBayes 0.6.0
+
+Source for the complete-data priors and results:
+Ramos, P. L., Achire Quispe, E., de Oliveira, R. P., and Achcar, J. A.
+(2026), Objective Bayesian inference for the Dhillon distribution,
+unpublished manuscript supplied by the authors.
+
+This derivation extends the conditions to independent right censoring.
+It does not claim that the source manuscript already proves these censored
+results. Priors remain those of the COMPLETE-DATA sampling model.
+
+1. SETUP
+
+S(t)=1/(1+theta*t^beta), beta>0, theta>0. Write l_i=log(x_i),
+r=sum(delta_i), N=r+c after discarding zero censoring limits, and
+y=log(theta). Exact observations must be positive. Define
+h(v)=exp(v)/(1+exp(v))^2 and s(v)=1/(1+exp(v)).
+
+Under Jeffreys/reference-beta, the posterior measure in (beta,y) is
+proportional, apart from positive data-only factors, to
+
+  beta^(r-1) prod_events h(y+beta*l_i) prod_censored s(y+beta*l_i) d beta d y.
+
+Under reference-theta it is multiplied by
+  w(y)=(pi^2+3+3*y^2)^(-1/2).
+
+Uniformly, (1/4)*exp(-abs(v)) <= h(v) <= exp(-abs(v)), and
+(1/2)*exp(-max(v,0)) <= s(v) <= exp(-max(v,0)).
+
+2. PROPRIETY
+
+For r=0, fix y in a bounded interval and let beta approach zero. The
+integrand has order beta^(-1) for both priors; the normalizer diverges.
+
+For r>=1 set y=beta*z and
+  A_0(z)=sum_events abs(z+l_i)+sum_censored max(z+l_i,0).
+The Jeffreys normalizer is comparable, up to fixed positive constants, to
+the integral of beta^r exp(-beta*A_0(z)) over beta>0 and real z.
+A_0 has slopes -r and N at the left and right tails. Its minimum is
+strictly positive iff either exact event times differ, or a censoring limit
+exceeds the common event time. If the minimum is positive, integration in
+beta gives Gamma(r+1)*A_0(z)^(-r-1), integrable on both z tails and compact
+sets. Reference-theta follows by w(y)<=1/sqrt(pi^2+3).
+
+If the minimum is zero, all events share l and all censoring logs are <=l.
+In the tube y=-beta*l+v, abs(v)<=1, beta>=1, all likelihood factors are
+bounded below by positive constants. The Jeffreys beta integral dominates
+beta^(r-1). Since w(y)>=C/beta on this tube, reference-theta dominates
+beta^(r-2). Both diverge for r>=1, proving necessity as well.
+
+3. POSITIVE BETA MOMENTS
+
+In proper cases, multiplying by beta^q, q>0, gives the finite upper bound
+Gamma(r+q+1)*integral A_0(z)^(-r-q-1) dz. Reference-theta follows by bounded
+domination. Thus all positive beta moments are finite for both priors.
+
+4. POSITIVE THETA MOMENTS
+
+For beta in a fixed compact positive interval, the y->infinity integrand
+has order exp((q-N)*y), with an additional factor of order 1/y for
+reference-theta. Both theta moments diverge for q>=N, including logarithmic
+divergence for reference-theta at q=N.
+
+For 0<q<N define
+  A_q(z)=sum_events abs(z+l_i)+sum_censored max(z+l_i,0)-q*z.
+Its slopes at the two tails are -(r+q) and N-q. If min A_q>0, integration
+in beta gives the finite bound Gamma(r+1)*integral A_q(z)^(-r-1) dz.
+Both priors then have finite moments. If A_q is negative on an interval,
+exponential growth causes divergence even after the factor w(beta*z).
+
+If the minimum is zero at z0, A_q(z)<=C*abs(z-z0) locally. Restrict beta>=1
+and abs(z-z0)<=1/beta. The exponential is bounded below on this tube,
+whose z-width is 2/beta. Its Jeffreys contribution dominates
+integral beta^(r-1) d beta. For reference-theta, w(beta*z)>=C'/beta,
+so it dominates integral beta^(r-2) d beta. Both diverge since r>=1.
+This argument includes a flat zero interval. Thus the exact condition for
+both priors is q<N and min A_q>0.
+
+The minimum occurs at a knot z=-l_i. Give l_i weight 1+delta_i, sort in
+ascending order, and choose the first l_i whose cumulative weight reaches
+N-q. This selects a minimizing knot in O(N log N) operations. The code
+withholds certification for signs unresolved by floating-point arithmetic.
+When all delta_i=1 this reduces to the complete-data criterion.
+
+5. MDI
+
+The MDI kernel is beta*theta^(1/beta). For fixed beta>0 the observed
+likelihood has theta-tail order theta^(-N). Choose an interval of positive
+beta sufficiently small that 1/beta-N>=-1. The theta integral diverges.
+Tonelli gives an improper posterior for every finite sample. Zero censoring
+limits are discarded before defining N because they contribute survival one.
+
+6. PREDICTIVE MOMENTS
+
+For every q>0 the conditional lifetime moment is infinite whenever beta<=q.
+Each registered proper posterior is positive throughout the positive
+parameter quadrant, so this set has positive posterior probability.
+Tonelli gives an infinite q-th predictive moment. The predictive distribution
+is nevertheless proper and has finite interior quantiles. The predictive
+mean is infinite; its variance and standard deviation are undefined.
+
+7. SAMPLING AND MODEL COMPARISON
+
+Coordinates are a=log(beta), eta=log(theta)+beta*l0, for fixed l0. The
+Jacobian to the original parameters is beta*theta and is included in the
+target. Geometry is fixed during retained simulation. Augmentation samples
+log S(T)=log S(censoring limit)-Exp(1) by exact inverse-survival transformation,
+without clipping. It targets the same posterior as the observed likelihood.
+Latent log times are stored and their logistic log density is used for parameter
+updates. This removes the need to exponentiate possibly enormous imputed times.
+The log-time Jacobian is parameter-independent and does not affect those updates.
+Public natural-time predictions still reject nonrepresentable draws explicitly.
+The transformed posterior target also avoids exponentiating log(theta), so
+parameter representability does not impose a hidden truncation of that target.
+Conversion of an unrepresentable parameter state to the public natural scale
+stops explicitly, rather than returning a bounded approximation.
+
+WAIC and LOO use observed-data contributions, not imputed complete-data
+densities. Each LOO training posterior is checked by section 2. DIC requires
+finite posterior parameter means. Marginal-likelihood Bayes factors are not
+provided under these improper priors. Raw predictive sample averages should
+not be interpreted as estimates of a finite predictive mean.

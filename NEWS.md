@@ -1,3 +1,24 @@
+# fitdistrBayes 0.6.0
+
+- Add the Dhillon (log-logistic) model to both fitting interfaces, bringing
+  the catalogues to 21 distributions and 59 model-prior routes. Parameters
+  are beta and theta, with survival 1/(1 + theta*t^beta).
+- Implement Jeffreys, ordered reference-beta (also reference), and ordered
+  reference-theta priors. Reject MDI because its posterior is improper.
+- Use stable log-density/survival/inverse-tail calculations, closed-form
+  log-moment initial values, and centered preconditioned slice sampling.
+  Right-censored data support both observed-likelihood and augmentation routes.
+  Retain latent times on the log scale and evaluate the posterior without
+  exponentiating log(theta), avoiding hidden bounds from numerical overflow.
+- Check the exact observed-data propriety condition, including some samples
+  with only one exact event. Check positive theta moments from a piecewise
+  linear criterion before reporting means, standard deviations or DIC.
+- Extend prediction, imputation, WAIC and PSIS-LOO to Dhillon. The LOO guard
+  checks each training posterior. Record that predictive lifetime means are
+  infinite and predictive variances undefined; quantiles remain valid.
+- Add model documentation, console examples and independent numerical and
+  regression tests. Existing models and their prior definitions are unchanged.
+
 # fitdistrBayes 0.5.1
 
 - Fix WAIC portability on macOS ARM and R builds without extended-precision

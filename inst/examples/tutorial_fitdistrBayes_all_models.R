@@ -12,7 +12,7 @@
 # source("tutorial_fitdistrBayes_all_models.R")
 #
 # If the package is not installed, run this ONCE with the tarball path:
-# install.packages("fitdistrBayes_0.2.3.tar.gz", repos = NULL, type = "source")
+# install.packages("fitdistrBayes_0.6.0.tar.gz", repos = NULL, type = "source")
 
 if (!requireNamespace("fitdistrBayes", quietly = TRUE)) {
   stop("Install fitdistrBayes first.")
@@ -667,6 +667,19 @@ show_bayes(weighted_lindley_bayes)
 cat("\nThe weighted Lindley MDI posterior is improper and is not fitted.\n")
 
 # =============================================================================
+# 21. DHILLON (log-logistic in the beta/theta parametrization)
+# =============================================================================
+set.seed(2950)
+x_dhillon <- exp((rlogis(100) - log(2)) / 3)
+dhillon_bayes <- lapply(c("jeffreys", "reference-beta", "reference-theta"),
+  function(pr) fitdistrBayes(x_dhillon, "dhillon", pr,
+    iter = tutorial_iter, warmup = tutorial_warmup,
+    chains = tutorial_chains, seed = 2951, control = tutorial_control))
+names(dhillon_bayes) <- c("Jeffreys", "Reference_beta", "Reference_theta")
+show_bayes(dhillon_bayes)
+print(dhillon_bayes$Jeffreys$predictive_moments)
+
+# =============================================================================
 # FINAL TABLE: all fits and diagnostics
 # =============================================================================
 all_fits <- c(
@@ -689,7 +702,8 @@ all_fits <- c(
   Nakagami_m = nakagami_bayes,
   Exponential_logarithmic = el_bayes,
   Rician = rician_bayes,
-  Weighted_lindley = weighted_lindley_bayes
+  Weighted_lindley = weighted_lindley_bayes,
+  Dhillon = dhillon_bayes
 )
 
 diagnostics <- do.call(rbind, lapply(

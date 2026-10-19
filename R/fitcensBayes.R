@@ -37,6 +37,9 @@
     "; apply n to the exact-event subset, not to total/imputed n")
   ix <- z$model == "t" & z$prior == "independence-jeffreys"
   z$exact_subset_sufficient_condition[ix] <- "at least 2 pairwise distinct exact events; ties are not certified"
+  z$exact_subset_sufficient_condition[z$model == "dhillon"] <- paste0(
+    "exact observed-data condition: at least one event and either distinct event times ",
+    "or a censoring limit strictly above the common event time")
   z$censored_methods <- "direct, augmentation"
   z$censoring <- "right; status=1 event, status=0 means T>x"
   z$prior_origin <- "complete-data sampling model"
@@ -56,7 +59,7 @@
       any(!status %in% c(0, 1))) stop("Data must be finite, with status exactly 0 or 1.")
   discrete <- model %in% c("geometric", "Poisson", "negative binomial")
   positive <- model %in% c("gamma", "weibull", "lognormal", "chi-squared", "frechet",
-                          "lomax", "nakagami", "rician", "weighted lindley",
+                          "lomax", "nakagami", "rician", "weighted lindley", "dhillon",
                           "exponential-logarithmic", "exponential")
   if (discrete && (any(x < 0) || any(x != floor(x))))
     stop("Discrete observations/censoring limits must be nonnegative integers; status=0 means T>x.")
@@ -106,6 +109,7 @@
 
 .cens_density <- function(model, x, th, fixed) {
   switch(model,
+    dhillon = .fdb_dhillon_log_density(x, th),
     beta = stats::dbeta(x, th["shape1"], th["shape2"], log = TRUE),
     cauchy = stats::dcauchy(x, th["location"], th["scale"], log = TRUE),
     `chi-squared` = stats::dchisq(x, th["df"], log = TRUE),
@@ -152,6 +156,7 @@
 .cens_survival <- function(model, x, th, fixed) {
   # All calculations use the upper tail directly, not 1 - p(...).
   ans <- switch(model,
+    dhillon = .fdb_dhillon_survival(x, th),
     beta = stats::pbeta(x, th["shape1"], th["shape2"], lower.tail = FALSE, log.p = TRUE),
     cauchy = stats::pcauchy(x, th["location"], th["scale"], lower.tail = FALSE, log.p = TRUE),
     `chi-squared` = stats::pchisq(x, th["df"], lower.tail = FALSE, log.p = TRUE),
@@ -188,7 +193,7 @@
   # floating-point weights otherwise need not sum to exactly one.
   if (model %in% c("beta", "chi-squared", "exponential", "gamma", "lognormal",
       "weibull", "frechet", "lomax", "nakagami", "exponential-logarithmic",
-      "rician", "weighted lindley")) ans[x <= 0] <- 0
+      "rician", "weighted lindley", "dhillon")) ans[x <= 0] <- 0
   if (any(is.nan(ans)) || any(ans > 1e-12)) return(rep(NaN, length(x)))
   pmin(ans, 0)
 }
@@ -236,6 +241,7 @@
 }
 
 .cens_prior <- function(model, prior, th, fixed, control, rician_logq) {
+  if (model == "dhillon") return(.fdb_dhillon_log_prior(th, prior))
   if (model %in% c("normal", "lognormal", "logistic", "gumbel", "cauchy") ||
       (model == "t" && !is.null(fixed$df))) {
     scale_name <- switch(model, normal = "sd", lognormal = "sdlog", "scale")
@@ -312,7 +318,7 @@
     initial[names(z)] <- z
   }
   real <- names(initial) %in% c("location", "mean", "meanlog")
-  probs <- names(initial) %in% c("prob", "theta")
+  probs <- names(initial) %in% c("prob", if (model != "dhillon") "theta")
   if (any(!is.finite(initial)) || any(initial[!real] <= 0) || any(initial[probs] >= 1))
     stop("Starting values lie outside parameter support.")
   initial
@@ -321,7 +327,8 @@
 .cens_transform <- function(model, initial) {
   pars <- names(initial)
   real <- pars %in% c("location", "mean", "meanlog")
-  prob <- pars %in% c("theta", "prob")
+  prob <- pars %in% c("prob", if (model != "dhillon") "theta")
+  dhillon_center <- if (model == "dhillon") unname(-log(initial["theta"]) / initial["beta"]) else 0
   loc <- which(real)
   loc_center <- if (length(loc)) initial[loc] else numeric()
   scale_name <- intersect(c("scale", "sd", "sdlog"), pars)
@@ -331,6 +338,8 @@
     u[!real & !prob] <- log(th[!real & !prob])
     u[real] <- (th[real] - loc_center) / loc_scale
     u[prob] <- stats::qlogis(th[prob])
+    if (model == "dhillon")
+      u <- c(log(th["beta"]), log(th["theta"]) + th["beta"] * dhillon_center)
     if (model == "gamma") u <- c(log(th["shape"] / th["rate"]), log(th["shape"]))
     if (model == "beta") u <- c(log(th["shape1"] / th["shape2"]), log(sum(th)))
     if (model == "lomax") u <- c(log(th["shape"]), log(th["scale"] / th["shape"]))
@@ -357,6 +366,11 @@
     jac <- sum(u[!real & !prob]) +
       sum(stats::plogis(u[prob], log.p = TRUE) + stats::plogis(u[prob], lower.tail = FALSE, log.p = TRUE)) +
       length(loc) * log(loc_scale)
+    if (model == "dhillon") {
+      b <- exp(u[1]); lt <- u[2] - b * dhillon_center
+      th <- stats::setNames(.fdb_exp_positive(c(u[1], lt)), c("beta", "theta"))
+      jac <- u[1] + lt
+    }
     if (model == "gamma") {
       th <- c(shape = exp(u[2]), rate = exp(u[2] - u[1])); jac <- 2 * u[2] - u[1]
     }
@@ -429,6 +443,7 @@
   lp <- .cens_survival(model, lower, th, fixed) - stats::rexp(length(lower))
   if (any(!is.finite(lp))) stop("Truncated sampling exceeded the representable tail range.")
   z <- switch(model,
+    dhillon = .fdb_dhillon_truncated(lower, th, lp),
     beta = stats::qbeta(lp, th["shape1"], th["shape2"], lower.tail = FALSE, log.p = TRUE),
     cauchy = stats::qcauchy(lp, th["location"], th["scale"], lower.tail = FALSE, log.p = TRUE),
     `chi-squared` = stats::qchisq(lp, th["df"], lower.tail = FALSE, log.p = TRUE),
@@ -492,15 +507,21 @@
   transform <- .cens_transform(model, initial)
   event <- status == 1L; cens <- !event
   state <- new.env(parent = emptyenv()); state$data <- x
+  if (model == "dhillon") state$log_data <- log(x)
+  dhillon_center <- if (model == "dhillon") unname(-log(initial["theta"]) / initial["beta"]) else 0
   evaluate <- function(u, augmented = FALSE) {
     if (any(!is.finite(u))) return(-Inf)
+    if (model == "dhillon") return(.fdb_dhillon_target(u, dhillon_center,
+      if (augmented) state$log_data else log(x),
+      if (augmented) rep(TRUE, length(x)) else event, prior))
     tr <- suppressWarnings(transform$from(u)); th <- tr$theta
     if (any(!is.finite(th)) || any(th[!names(th) %in% c("location", "mean", "meanlog")] <= 0) ||
-        any(th[names(th) %in% c("theta", "prob")] >= 1) || !is.finite(tr$jacobian)) return(-Inf)
+        any(th[names(th) %in% c("prob", if (model != "dhillon") "theta")] >= 1) || !is.finite(tr$jacobian)) return(-Inf)
     priorval <- suppressWarnings(logprior(th))
     if (length(priorval) != 1L || !is.finite(priorval)) return(-Inf)
     if (augmented) {
-      ll <- suppressWarnings(.cens_density(model, state$data, th, fixed))
+      ll <- if (model == "dhillon") .fdb_dhillon_logtime_density(state$log_data, th) else
+        suppressWarnings(.cens_density(model, state$data, th, fixed))
     } else {
       ll <- c(suppressWarnings(.cens_density(model, x[event], th, fixed)),
               suppressWarnings(.cens_survival(model, x[cens], th, fixed)))
@@ -530,7 +551,10 @@
     for (i in seq_len(iter)) {
       if (method == "augmentation") {
         theta <- transform$from(as.numeric(geometry$center + geometry$basis %*% z))$theta
-        state$data[cens] <- .cens_truncated(model, x[cens], theta, fixed)
+        if (model == "dhillon") {
+          lp <- .fdb_dhillon_survival(x[cens], theta) - stats::rexp(sum(cens))
+          state$log_data[cens] <- .fdb_dhillon_truncated_log(x[cens], theta, lp)
+        } else state$data[cens] <- .cens_truncated(model, x[cens], theta, fixed)
         # Exact blocked Normal-inverse-Gamma conditional, not a restarted fit.
         if (model %in% c("normal", "lognormal")) {
           y <- if (model == "normal") state$data else log(state$data)
@@ -638,7 +662,7 @@ fitcensBayes <- function(x, status, distr, prior = NULL, start = NULL, fixed = N
   call <- match.call()
   if (length(list(...))) stop("Unused arguments: ", paste(names(list(...)), collapse = ", "))
   if (!is.character(distr) || length(distr) != 1L || is.na(distr))
-    stop("This separate extension accepts the 20 registered distribution names, not custom densities yet.")
+    stop("This separate extension accepts the 21 registered distribution names, not custom densities yet.")
   model <- .fdb_model_name(distr)
   if (!is.character(prior) || length(prior) != 1L || is.na(prior) || !nzchar(prior))
     stop("Specify one registered prior name.")
@@ -660,10 +684,11 @@ fitcensBayes <- function(x, status, distr, prior = NULL, start = NULL, fixed = N
   m <- length(exact); nc <- sum(status == 0L)
   # Check priors/fixed parameters before the event-subset propriety guard.
   # The upstream validator supplies detailed errors for aliases and fixed df.
-  if (!m && !(model == "exponential" && prior_key == "mdi" && sum(x) > 0))
+  if (!m && model != "dhillon" && !(model == "exponential" && prior_key == "mdi" && sum(x) > 0))
     stop("Posterior propriety is not certified with zero events for this route; no sampling was performed.")
   guard_data <- if (!m || (model == "exponential" && sum(exact) == 0 && sum(x) > 0)) 1 else exact
-  built <- tryCatch(.fdb_build_builtin(guard_data, model, prior_key, fixed, start),
+  built <- if (model == "dhillon") .fdb_build_dhillon(x, prior_key, fixed, start, status) else
+    tryCatch(.fdb_build_builtin(guard_data, model, prior_key, fixed, start),
     error = function(e) stop("Censored-model validation failed. The complete-event sufficient criterion or model/prior restriction was not met: ",
                             conditionMessage(e), ". This does not by itself establish impropriety of every censored case.", call. = FALSE))
   fixed <- built$fixed
@@ -691,14 +716,15 @@ fitcensBayes <- function(x, status, distr, prior = NULL, start = NULL, fixed = N
   if (length(chain_list) != chains || any(vapply(chain_list, nrow, integer(1)) != nsave) ||
       any(vapply(chain_list, function(z) any(!is.finite(z)), logical(1)))) stop("Invalid posterior chains; fit not returned.")
   positive_parameters <- setdiff(built$parameters, c("location", "mean", "meanlog"))
-  probability_parameters <- intersect(built$parameters, c("theta", "prob"))
+  probability_parameters <- intersect(built$parameters, c("prob", if (model != "dhillon") "theta"))
   if (any(vapply(chain_list, function(z)
     any(z[, positive_parameters, drop=FALSE] <= 0) ||
     any(z[, probability_parameters, drop=FALSE] >= 1), logical(1))))
     stop("Posterior draws reached a nonrepresentable parameter boundary; no clipping was applied.")
   posterior <- .cens_summarize(chain_list, independent = sampled$independent)
-  moments <- .fdb_moment_status(model, prior_key, built$parameters, length(guard_data), fixed, guard_data)
-  if (nc) {
+  moments <- if (model == "dhillon") built$moment_status else
+    .fdb_moment_status(model, prior_key, built$parameters, length(guard_data), fixed, guard_data)
+  if (nc && model != "dhillon") {
     # Dominance proves existence, never nonexistence, of moments. Unproved
     # censored moments are NA, not asserted infinite from complete-data tests.
     for (col in c("mean_exists", "variance_exists")) moments[[col]][!moments[[col]] %in% TRUE] <- NA
@@ -727,7 +753,7 @@ fitcensBayes <- function(x, status, distr, prior = NULL, start = NULL, fixed = N
     if (passed) "Rank-normalized split/folded R-hat and bulk/tail ESS targets met; this is not a proof of convergence." else
       paste0("Diagnostic targets not met for: ", paste(posterior$parameter[!good], collapse = ", "), ". Increase iter and inspect chains.")
   propriety <- if (model == "exponential") "proper: exact censored Gamma posterior" else
-    if (!nc) built$propriety else paste0("proper by exact-event subset dominance; m=", m, "; ", built$propriety)
+    if (!nc || model == "dhillon") built$propriety else paste0("proper by exact-event subset dominance; m=", m, "; ", built$propriety)
   answer <- list(call = call,
     model = list(name = model, parameters = built$parameters, fixed = fixed, n = length(x)),
     prior = list(input = prior, key = prior_key, label = built$prior_label, kernel = built$prior_kernel,
@@ -756,6 +782,10 @@ fitcensBayes <- function(x, status, distr, prior = NULL, start = NULL, fixed = N
     answer$.truncated <- function(lower, th) .cens_truncated(model, lower, th, fixed)
   }
   class(answer) <- "fitcensBayes"
+  if (model == "dhillon") {
+    answer$predictive_moments <- .fdb_dhillon_predictive_moments()
+    answer$initialization$method <- paste0("Dhillon log-moment start; observed-posterior geometry; dispersed chains")
+  }
   if (!identical(criteria, FALSE)) {
     answer$criteria <- .fdb_criteria_after_fit(answer, criteria)
   }

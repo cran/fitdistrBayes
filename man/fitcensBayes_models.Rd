@@ -8,8 +8,8 @@ conditions and sampling options.
 }
 \usage{fitcensBayes_models()}
 \value{
-A data frame with 56 rows (one per registered model-prior route) for
-20 distributions. Its character columns are:
+A data frame with 59 rows (one per registered model-prior route) for
+21 distributions. Its character columns are:
 \describe{
   \item{\code{model}}{Canonical distribution name.}
   \item{\code{prior}}{Registered prior name accepted by the fitting function.}
@@ -19,7 +19,8 @@ A data frame with 56 rows (one per registered model-prior route) for
   not a claim that the same algorithm is used under censoring.}
   \item{\code{exact_subset_sufficient_condition}}{Sufficient condition
   applied to the exact events alone. Failure means not certified, not
-  necessarily improper. See the analytic Exponential exception below.}
+  necessarily improper. Dhillon instead lists its exact observed-data
+  condition. See also the analytic Exponential exception below.}
   \item{\code{censored_methods}}{Available observed-likelihood and
   data-augmentation methods.}
   \item{\code{censoring}}{Right-censoring status convention.}
@@ -30,10 +31,13 @@ A data frame with 56 rows (one per registered model-prior route) for
 Prior formulas, parameterizations, and aliases are inherited from
 \code{\link{fitdistrBayes}} and \code{\link{fitdistrBayes_routes}}.
 The catalogue is not an assertion that objective priors are invariant to
-the censoring design. Conditions are sufficient and conservative.
+the censoring design. Conditions are sufficient and conservative except
+where an exact model-specific condition is explicitly documented.
 Exponential MDI additionally permits zero exact events when the total
 observed time is positive and finite; the resulting Gamma posterior
 has shape two. The function documentation describes this analytic case.
+Dhillon requires an event and either distinct exact times or a censoring
+limit above the common event time; see \link{Dhillon}.
 }
 \seealso{\code{\link{fitcensBayes}}, \code{\link{fitdistrBayes_routes}}}
 \examples{

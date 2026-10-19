@@ -37,12 +37,14 @@ dat$weighted_lindley <- rgamma(
 )
 
 registry <- fitdistrBayes_routes()
-if (nrow(registry) != 56L || anyDuplicated(registry)) {
-  stop("The public route catalogue must contain 56 unique entries.",
+dat$dhillon <- exp((qlogis(seq(0.02, 0.98, length.out = 25)) - log(2)) / 3)
+if (nrow(registry) != 59L || anyDuplicated(registry)) {
+  stop("The public route catalogue must contain 59 unique entries.",
        call. = FALSE)
 }
 
 data_key <- c(
+  dhillon = "dhillon",
   beta = "beta", cauchy = "cauchy", `chi-squared` = "chisq",
   exponential = "exponential", `exponential-logarithmic` = "el",
   frechet = "frechet", gamma = "gamma", geometric = "geometric",

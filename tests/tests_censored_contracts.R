@@ -7,7 +7,7 @@ check <- function(value, message) {
   counter$checks <- counter$checks + 1L
 }
 routes <- fitcensBayes_models()
-check(nrow(routes) == 56 && length(unique(routes$model)) == 20, "Catalog changed.")
+check(nrow(routes) == 59 && length(unique(routes$model)) == 21, "Catalog changed.")
 check(identical(names(formals(fitcensBayes))[1:4], c("x", "status", "distr", "prior")), "Argument order.")
 
 # Every density and prior agrees with the frozen original at multiple points.

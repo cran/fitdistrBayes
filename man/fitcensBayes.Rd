@@ -22,7 +22,7 @@ fitcensBayes(x, status, distr, prior = NULL, start = NULL, fixed = NULL,
   One (\code{TRUE}) denotes an exact event; zero (\code{FALSE}) denotes the
   strict event \eqn{T > x}. For a discrete model, a record meaning
   \eqn{T \ge 3} must be entered as \code{x = 2, status = 0}.}
-  \item{distr}{One of the 20 registered distribution names, ignoring case.
+  \item{distr}{One of the 21 registered distribution names, ignoring case.
   See \code{\link{fitcensBayes_models}} and the Details section.
   A density function or model specification defined by the user is not
   supported by this censored interface.}
@@ -69,11 +69,11 @@ parameters. The observed likelihood is proportional to
 where \eqn{S(t\mid\theta)=P(T>t\mid\theta)}. The censoring distribution
 is not estimated. Only right censoring is implemented.
 
-The supported distributions are beta, Cauchy, chi-squared, exponential,
+The supported distributions are beta, Cauchy, chi-squared, Dhillon, exponential,
 gamma, geometric, lognormal, logistic, negative binomial, normal, Poisson,
 Student-t, Weibull, Frechet, Gumbel, Lomax, Nakagami-m,
 exponential-logarithmic, Rician, and weighted Lindley. Their parameterizations
-and aliases are those of \code{\link{fitdistrBayes}}. There are 56 registered
+and aliases are those of \code{\link{fitdistrBayes}}. There are 59 registered
 model-prior routes. Not every prior is available for every model.
 
 \strong{Interpretation of the priors.}
@@ -94,6 +94,15 @@ Uncertified moments are labelled \code{NA} and are not estimated from a
 finite chain. Known infinite moments are distinguished by \code{FALSE}.
 In particular, positive moments of the Weibull scale diverge under the
 registered priors, even though medians and credible intervals exist.
+
+Dhillon uses an exact observed-data condition, rather than the conservative
+event-subset rule: there must be at least one exact event and either
+two distinct event times or a censoring limit strictly above the common
+event time. Its moment condition also uses the observed censoring limits.
+See \link{Dhillon}. Zero censoring limits are uninformative and are excluded
+from its moment criterion. For a valid sample with only one distinct event
+time, its starting heuristic uses positive observed times before refinement
+by the observed posterior; these are not treated as additional exact events.
 
 For the exponential model, let \eqn{m=\sum_i\delta_i} and
 \eqn{A=\sum_i x_i}. The rate posterior is
@@ -154,6 +163,9 @@ A list of class \code{"fitcensBayes"}, separate from \code{"fitdistrBayes"}:
   and variance is finite (\code{TRUE}), infinite (\code{FALSE}), or not
   certified (\code{NA}), with explanations. Uncertified or infinite means,
   standard deviations and associated MCSEs are suppressed in the summary.}
+  \item{\code{predictive_moments}}{Present for Dhillon: flags and an explanation
+  that positive predictive lifetime moments are infinite. The predictive
+  variance and standard deviation are undefined. Quantiles remain valid.}
   \item{\code{diagnostics}}{Diagnostic targets, extrema, explanatory
   messages and a \code{converged} flag. This flag denotes meeting the
   diagnostic targets, not a mathematical proof of convergence.

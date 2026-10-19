@@ -1,7 +1,7 @@
 Package: fitdistrBayes
 Type: Package
 Title: Objective Bayesian Distribution Fitting
-Version: 0.5.1
+Version: 0.6.0
 Authors@R: person("Pedro Luiz", "Ramos", role = c("aut", "cre", "cph"),
     email = "pedro.ramos@uc.cl")
 Description: Fits common univariate distributions using registered objective
@@ -26,6 +26,6 @@ Suggests: posterior, loo (>= 2.7.0)
 NeedsCompilation: no
 Author: Pedro Luiz Ramos [aut, cre, cph]
 Maintainer: Pedro Luiz Ramos <pedro.ramos@uc.cl>
-Packaged: 2026-09-29 14:57:55 UTC; pedro
+Packaged: 2026-10-19 13:58:15 UTC; pedro
 Repository: CRAN
-Date/Publication: 2026-09-30 22:20:02 UTC
+Date/Publication: 2026-10-19 15:00:02 UTC

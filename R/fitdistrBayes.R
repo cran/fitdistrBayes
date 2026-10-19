@@ -813,6 +813,9 @@
   aliases <- c(
     "beta" = "beta",
     "cauchy" = "cauchy",
+    "dhillon" = "dhillon",
+    "log-logistic" = "dhillon",
+    "loglogistic" = "dhillon",
     "chi-squared" = "chi-squared",
     "chi-square" = "chi-squared",
     "chisquared" = "chi-squared",
@@ -857,7 +860,7 @@
   )
   if (!key %in% names(aliases)) {
     .fdb_stop(
-      "Unknown distribution '%s'. Recognized models are beta, cauchy, chi-squared, exponential, exponential-logarithmic, Frechet, gamma, geometric, Gumbel, log-normal/lognormal, logistic, Lomax, Nakagami-m, negative binomial, normal, Poisson, Rician, t, weibull, and weighted Lindley.",
+      "Unknown distribution '%s'. Recognized models are beta, cauchy, chi-squared, Dhillon (log-logistic), exponential, exponential-logarithmic, Frechet, gamma, geometric, Gumbel, log-normal/lognormal, logistic, Lomax, Nakagami-m, negative binomial, normal, Poisson, Rician, t, weibull, and weighted Lindley.",
       distr
     )
   }
@@ -866,6 +869,9 @@
 
 .fdb_prior_name <- function(prior, model = NULL) {
   key <- .fdb_normalize_name(prior)
+  if (identical(model, "dhillon") &&
+      key %in% c("reference", "ref", "r", "reference-beta", "reference-shape"))
+    return("reference-beta")
   if (identical(model, "weighted lindley")) {
     if (key %in% c("reference-lambda", "reference-rate")) {
       return("reference-lambda")
@@ -933,6 +939,9 @@
            "largest multiplicity m satisfies 2m < n + 1")),
     rows("chi-squared", c("jeffreys", "reference"), "df", "none",
          "univariate slice sampling", "n >= 1; x > 0"),
+    rows("dhillon", c("jeffreys", "reference-beta", "reference-theta"),
+         "beta, theta", "none", "preconditioned slice sampling in centered log coordinates",
+         "n >= 2; x > 0; nonconstant sample"),
     rows("exponential", c("jeffreys", "reference", "mdi"), "rate", "none",
          "exact Gamma posterior", "n >= 1; x >= 0; sum(x) > 0"),
     rows("exponential-logarithmic",
@@ -1016,6 +1025,7 @@ fitdistrBayes_routes <- function(model = NULL) {
 }
 
 .fdb_moment_status <- function(model, prior, parameters, n, fixed, x = NULL) {
+  if (model == "dhillon") return(.fdb_dhillon_moments(x))
   answer <- data.frame(
     parameter = parameters,
     mean_exists = rep(NA, length(parameters)),
@@ -1795,6 +1805,7 @@ fitdistrBayes_routes <- function(model = NULL) {
 }
 
 .fdb_build_builtin <- function(x, model, prior, fixed, start = NULL) {
+  if (model == "dhillon") return(.fdb_build_dhillon(x, prior, fixed, start))
   n <- length(x)
   S <- sum(x)
   sum_log_x <- if (all(x > 0)) sum(log(x)) else NA_real_
@@ -3539,7 +3550,7 @@ fitdistrBayes_routes <- function(model = NULL) {
 #' @param distr A recognized distribution name (case-insensitive), a density
 #'   function whose first argument is the observation vector, or an object made
 #'   by [fitdistrBayes_model()]. The package
-#'   includes 20 built-in distributions, including Gumbel, Frechet, Lomax,
+#'   includes 21 built-in distributions, including Dhillon, Gumbel, Frechet, Lomax,
 #'   Nakagami-m, Exponential-Logarithmic, Rician, and weighted Lindley.
 #' @param prior An objective-prior name or, for a custom density function, a
 #'   prior function.  Omit this argument when `distr` is an object made by
@@ -3818,6 +3829,8 @@ fitdistrBayes <- function(x, distr, prior = NULL, start = NULL, fixed = NULL,
     answer$.rng <- built$rng
   }
   class(answer) <- "fitdistrBayes"
+  if (model == "dhillon" && !custom)
+    answer$predictive_moments <- .fdb_dhillon_predictive_moments()
   if (!identical(criteria, FALSE)) {
     answer$criteria <- .fdb_criteria_after_fit(answer, criteria)
   }

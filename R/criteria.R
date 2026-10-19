@@ -28,6 +28,12 @@
   event <- if (inherits(object, "fitcensBayes")) object$status == 1L else rep(TRUE, length(x))
   model <- object$model$name
   prior <- object$prior$key
+  if (identical(model, "dhillon") && !identical(prior, "user-defined")) {
+    ok <- .fdb_dhillon_loo(x, event)
+    return(list(certified = ok, reason = if (all(ok))
+      "Every training posterior satisfies the exact Dhillon observed-data propriety condition." else
+      "At least one Dhillon training posterior is improper; PSIS-LOO is withheld."))
+  }
   if (identical(prior, "user-defined")) return(list(
     certified = rep(FALSE, length(x)),
     reason = "Leave-one-out posterior propriety is not certified automatically for models or priors defined by the user."))
@@ -115,7 +121,7 @@
 .fdb_zero_information <- function(object) {
   if (!inherits(object, "fitcensBayes") || !object$model$name %in%
       c("beta", "chi-squared", "exponential", "gamma", "lognormal", "weibull",
-        "frechet", "lomax", "nakagami", "exponential-logarithmic", "rician", "weighted lindley"))
+        "frechet", "lomax", "nakagami", "exponential-logarithmic", "rician", "weighted lindley", "dhillon"))
     return(integer())
   which(object$status == 0L & object$data == 0)
 }

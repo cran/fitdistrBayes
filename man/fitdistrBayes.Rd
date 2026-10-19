@@ -65,6 +65,10 @@ principal components:
   \item{\code{moment_status}}{A data frame recording whether the posterior
   mean and variance of each parameter are known to exist and explaining the
   corresponding analytical condition.}
+  \item{\code{predictive_moments}}{Present for the built-in Dhillon model:
+  a list with logical \code{mean_exists} and \code{variance_exists} flags
+  and an explanatory \code{note}. Its predictive lifetime mean is infinite
+  and its predictive variance is undefined; quantiles remain meaningful.}
   \item{\code{diagnostics}}{A list containing the overall convergence
   decision, thresholds, extrema of \eqn{\widehat R} and effective sample
   sizes, acceptance information when applicable, and explanatory messages.
@@ -98,7 +102,7 @@ variances, and their Monte Carlo errors are reported only when the
 corresponding moments have been certified to exist.
 }
 \details{
-Recognized distributions are beta, Cauchy, chi-squared, exponential,
+Recognized distributions are beta, Cauchy, chi-squared, Dhillon, exponential,
 Exponential-Logarithmic, Frechet, Gamma, geometric, Gumbel, lognormal,
 logistic, Lomax, Nakagami-m, negative binomial, Normal, Poisson, Rician,
 Student t, Weibull, and weighted Lindley. Available priors depend on the model and parameter of interest;
@@ -119,6 +123,13 @@ weighted Lindley, \code{"reference"} is the one-group reference prior and is
 equal to the Fisher-information Jeffreys prior; \code{"reference-lambda"} and
 \code{"reference-phi"} select the exact ordered reference prior for the stated
 scalar target. Its MDI posterior is improper and therefore disabled.
+
+For Dhillon, \code{"reference"} is an alias of \code{"reference-beta"},
+which coincides with Jeffreys. \code{"reference-theta"} is a different
+ordered reference prior. The parameters \code{beta, theta} are both positive;
+\code{theta} is not a probability. See \link{Dhillon} for the density,
+exact moment conditions, and the distinction from the conventional
+log-logistic scale parameter.
 
 For numerical routes, the automatic center and any user overrides are
 recorded in \code{fit$initialization}. Each MCMC chain is dispersed from this
@@ -168,6 +179,8 @@ such as \code{"log-normal"}, \code{"negative binomial"}, \code{"student-t"},
 \code{beta} \tab \code{shape1, shape2} \tab \code{jeffreys, reference} \cr
 \code{cauchy} \tab \code{location, scale} \tab \code{jeffreys, reference, mdi} \cr
 \code{chi-squared} \tab \code{df} \tab \code{jeffreys, reference} \cr
+\code{dhillon} \tab \code{beta, theta} \tab \code{jeffreys, reference-beta} \cr
+ \tab \tab \code{reference-theta} \cr
 \code{exponential} \tab \code{rate} \tab \code{jeffreys, reference, mdi} \cr
 \code{exponential-logarithmic} \tab \code{theta, rate} \tab \code{jeffreys, mdi} \cr
  \tab  \tab \code{reference-theta, reference-rate} \cr
@@ -198,7 +211,7 @@ improper posterior when \code{df} is unrestricted and are rejected before
 sampling. The other three priors require \code{fixed = list(df = ...)};
 their propriety checks account for the largest number of repeated observations
 and the fixed value of \code{df}. The generic label
-\code{"reference"} is used only where its parameter ordering is unambiguous.
+\code{"reference"} selects the ordering documented for that model.
 For Gamma and Exponential-Logarithmic models, the parameter of interest is
 therefore stated in the label. Unsupported combinations, including objective
 priors known to yield an improper posterior, are rejected before sampling.
@@ -252,8 +265,8 @@ two methods are computed on demand and require retained callables.
 \section{Complete console tutorial}{
 The installed file
 \code{system.file("examples", "tutorial_fitdistrBayes_all_models.R",
-package = "fitdistrBayes")} contains simulated data for all 20 built-in
-families, all 56 enabled model-prior routes, comparisons with
+package = "fitdistrBayes")} contains simulated data for all 21 built-in
+families, all 59 enabled model-prior routes, comparisons with
 \code{MASS::fitdistr()} where directly available, and a final diagnostic table.
 It prints to the console and does not save analysis results. Set
 \code{quick_mode <- TRUE} for a short demonstration or \code{FALSE} for the
