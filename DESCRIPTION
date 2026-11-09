@@ -1,7 +1,7 @@
 Package: fitdistrBayes
 Type: Package
-Title: Objective Bayesian Distribution Fitting
-Version: 0.6.0
+Title: Objective Bayesian Distribution Fitting and AFT Regression
+Version: 0.8.0
 Authors@R: person("Pedro Luiz", "Ramos", role = c("aut", "cre", "cph"),
     email = "pedro.ramos@uc.cl")
 Description: Fits common univariate distributions using registered objective
@@ -16,16 +16,22 @@ Description: Fits common univariate distributions using registered objective
     the registered complete-data priors, observed-data likelihood sampling or
     data augmentation, with sufficient posterior-propriety checks. Optional
     post-processing provides WAIC, PSIS-LOO, and DIC for observed-data likelihoods.
+    Formula-based accelerated failure time regression is available for nine
+    lifetime families with complete or right-censored data, including gamma
+    and Prentice generalized gamma models, fixed objective priors, survival
+    prediction, and time ratios. Model-specific sufficient propriety and
+    moment conditions guard the reported summaries and predictive comparisons.
     The reference-prior framework follows Bernardo (1979)
     <doi:10.1111/j.2517-6161.1979.tb01066.x>.
 License: GPL-3
 Encoding: UTF-8
 Language: en-US
 Depends: R (>= 4.1.0)
+Imports: survival, stats
 Suggests: posterior, loo (>= 2.7.0)
 NeedsCompilation: no
 Author: Pedro Luiz Ramos [aut, cre, cph]
 Maintainer: Pedro Luiz Ramos <pedro.ramos@uc.cl>
-Packaged: 2026-10-19 13:58:15 UTC; pedro
+Packaged: 2026-11-08 16:49:13 UTC; pedro
 Repository: CRAN
-Date/Publication: 2026-10-19 15:00:02 UTC
+Date/Publication: 2026-11-09 18:10:02 UTC

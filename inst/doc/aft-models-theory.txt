@@ -1,0 +1,205 @@
+Objective AFT families: parameter measures and executable certificates
+=====================================================================
+
+Scope and provenance
+--------------------
+The fixed-error families and gamma Fisher information follow the local
+manuscript "Objective Bayesian Inference for Parametric Accelerated Failure
+Time Models", Pedro L. Ramos, draft dated August 25, 2026 (project 095).
+That draft proved gamma propriety only after compact restriction of shape.
+The unrestricted gamma argument below completes that boundary analysis for
+the sufficient failure-design conditions used by this implementation.
+It is an implementation derivation, not a claim that the old draft already
+contained the theorem or that a numerical check constitutes a proof.
+
+The Student-t certificate below is deliberately more conservative than the
+draft's almost-everywhere discussion. Full rank and absence of a fit of ALL
+failures do not exclude singular configurations fitting many repeated
+observations. No almost-sure statement is used as a pointwise software check.
+
+All likelihoods use original-time densities for failures and survival
+probabilities for right censoring. Censoring is independent/noninformative
+conditional on covariates. Priors are constructed for the complete-data
+experiment, not for every possible censoring mechanism. Every design contains
+an intercept. Rank and noninterpolation use relative tolerance 1e-10.
+
+1. Fixed-error location-scale models
+-----------------------------------
+log(T) = X beta + sigma Z, sigma>0; p is the number of regression coefficients.
+Z has standard normal (lognormal), minimum extreme value (Weibull), logistic
+(log-logistic), Laplace (log-Laplace), or Student-t_df (log-t) distribution.
+Student degrees of freedom are fixed, explicitly supplied, not estimated.
+The Weibull survival is exp[-(t/exp(eta))^(1/sigma)].
+
+With respect to d beta d sigma, the joint Jeffreys prior is sigma^(-(p+1)).
+The beta-interest, scale-nuisance ordered reference construction with product
+compact sets gives 1/sigma. Write the chosen measure as sigma^(-a), with a=1
+or a=p+1. Changing the dimension p changes joint Jeffreys, not reference.
+There is no MDI route here. The prior called Simple belongs only to GG.
+
+Let d denote failures and X_F,y_F their design and log times. For the four
+exponentially bounded errors, sufficient conditions are full rank p,
+noninterpolation y_F not in col(X_F), and d>p. Their density is bounded by
+K exp(-c|z|). Thus the failure-only likelihood dominates the censored
+likelihood and its integrated kernel is bounded by
+  C sigma^(-d-a) (1+sigma^p) exp(-c0/sigma).
+This is integrable at both ends. The same argument certifies
+E(||beta||^r sigma^s)<infinity for r>=0 and d+a>p+r+s+1.
+
+For a positive marginal moment of beta_j or sigma, the boundary is exact:
+write beta=sigma b and integrate over a fixed small ball of b on which
+|b_j|>epsilon (for beta_j). As sigma tends to infinity, all standardized
+residuals remain bounded and all censored survival factors are bounded away
+from zero. The lower bound is C sigma^(p+r-d-a). Hence absolute moments
+at or above r=d+a-p-1 diverge even with these censored observations.
+Moment flags FALSE refer to lack of absolute integrability, not a Monte Carlo
+estimate. Standard deviations require a finite second moment.
+
+Exponential and Rayleigh fix sigma at 1 and 1/2, respectively. Both priors
+then reduce to a flat measure on beta. Full rank X_F alone is sufficient;
+exact interpolation is harmless with scale fixed. All polynomial beta
+moments are finite by an exponential-envelope/coercivity argument.
+
+2. Student-t: a sufficient pointwise certificate
+-----------------------------------------------
+Choose p failures whose design rows form an invertible matrix. Reserve them.
+Among the other failures, construct B disjoint blocks of p+1 observations
+whose augmented matrices [X_block, y_block] have rank p+1.
+For each block, the infimum over beta of its maximum absolute residual is
+strictly positive. Therefore, for 0<sigma<=1, at least one error-density
+factor in that block is bounded by C sigma^(df+1); the remaining factors
+are bounded. Integration over beta using the p reserved Student densities
+contributes exactly a constant times sigma^p. Consequently the small-scale
+normalizing integral is bounded by
+  C integral_0^1 sigma^(p-d-a+B*(df+1)) d sigma.
+The implemented sufficient condition is
+  B*(df+1) > d+a-p-1.
+The large-scale bound is C sigma^(p-d-a); d>p and a>=1 suffice there.
+
+Each block is found by deterministic, column-scaled QR with a documented
+tolerance. A greedy block search need not find every certifiable dataset;
+failure is reported as not certified, never as a proof of impropriety.
+This criterion allows factors and repeated rows when enough noninterpolable
+blocks remain, without enumerating all subsets or trusting generic position.
+
+Integrating |beta_j|^r over the reserved p factors is finite when r<df and
+is bounded by C(1+sigma^r). Thus a sufficient coefficient-moment condition
+is r<min(df,d+a-p-1). The sigma condition is r<d+a-p-1 once the small-scale
+certificate passes. The large-scale divergence bound in section 1 still
+applies. Coefficient moments above df but below the large-scale bound remain
+unknown, not falsely declared infinite. These conservative tests can reject
+proper Student posteriors, particularly with many covariates or few failures.
+
+Counterexample to the weaker old-draft check: intercept only, uncensored
+log times (0,0,0,1), df=1, reference prior. In |beta|<c*sigma near zero,
+the three tied likelihood factors contribute sigma^-3, the fourth contributes
+sigma^1, the prior sigma^-1 and beta integration sigma. The remaining scale
+integral is proportional to integral sigma^-2 d sigma and diverges.
+The design is nevertheless full rank and not all four observations interpolate.
+The new certificate refuses this sample.
+
+3. Gamma AFT with unrestricted, estimated shape
+------------------------------------------------
+T_i ~ Gamma(k, rate=k*exp(-eta_i)), eta_i=x_i' beta, k>0.
+The conditional mean is exp(eta_i). There is no extra free sigma.
+Complete-data Fisher information is block diagonal:
+  I_beta,beta = k X'X,
+  I_k,k = n (trigamma(k)-1/k).
+With beta as the interest block, product compact sets give
+  pi_R(beta,k) proportional to sqrt(trigamma(k)-1/k).
+Joint Jeffreys is
+  pi_J(beta,k) proportional to k^(p/2)*sqrt(trigamma(k)-1/k).
+The scale-dependent nuisance reference normalizer is constant in beta, so
+the ordered reference construction does not supply a k^(p/2) factor.
+These priors are rederived in this submodel; they are not the GG prior
+evaluated on a lower-dimensional constraint.
+
+THEOREM (sufficient unrestricted gamma propriety).
+If X_F has full rank p, y_F is not in its column space, and d>p, both
+posteriors above are proper on beta in R^p and k in (0,infinity).
+There are no prior hyperparameters or artificial shape limits.
+
+PROOF.
+Write z_i=y_i-x_i'beta and phi(z)=exp(z)-1-z. The log-time density is
+  c(k) exp[-k phi(z)], c(k)=k^k exp(-k)/Gamma(k).
+Original-time Jacobians are positive data constants. Censoring factors are
+at most one. By full rank, H(beta)=sum_F phi(y_i-x_i'beta) is coercive,
+since phi(z)>=c|z|-C for fixed positive c,C. Noninterpolation gives
+h0=inf_beta H(beta)>0.
+
+For 0<k<=1, c(k)<=Ck. Also H(beta)>=c1||beta||-C1, whence
+  integral ||beta||^r exp[-k H(beta)] d beta <= C_r k^(-p-r)
+for every r>=0. The reference shape factor is asymptotic to 1/k;
+the joint Jeffreys factor is asymptotic to k^(p/2-1). Therefore the
+normalizing integrals at zero are bounded by powers
+  reference: k^(d-p-1),  joint Jeffreys: k^(d-p/2-1),
+both integrable under d>p.
+
+For k>=1, c(k)<=C sqrt(k). Split k H(beta) into k H(beta)/2 twice.
+One part is at least k h0/2; the other is at least H(beta)/2. Thus
+  integral ||beta||^r exp[-k H(beta)] d beta <= C_r exp(-k h0/2).
+The reference and joint shape factors grow at most polynomially
+(respectively k^-1 and k^(p/2-1)). Every positive shape moment is finite.
+The bound also permits polynomial coefficient moments subject to the
+small-k threshold. This proves propriety and the stated finite moments.
+
+For completeness the coefficient-moment threshold is exact, including
+right-censored observations. Set beta=b/k, and choose a compact full-
+dimensional ball with all x_i'b>epsilon>0 and |b_j|>epsilon for the desired
+coefficient. Such a ball exists because the design contains an intercept.
+Failure factors are bounded below by C k. For a finite censored time t_i,
+the gamma CDF at k*t_i*exp(-x_i'b/k) tends to exp(-x_i'b)<1, uniformly
+on this ball. Survival factors are therefore bounded below by positive
+constants. Zero censoring contributes one. The beta Jacobian is k^-p
+and |beta_j|^r contributes k^-r. The lower powers are the same as above.
+Hence absolute coefficient moments exist exactly for
+  reference: r<d-p; joint Jeffreys: r<d-p/2.
+All positive shape moments exist. A finite first absolute moment does not
+imply that exponentiated coefficients or lifetime means have finite means.
+The implementation reports time-ratio medians/quantiles, not their means.
+
+If shape is explicitly fixed, its prior factors are constants and both
+routes reduce to flat beta. Full rank of the failure design then suffices,
+with all polynomial beta moments finite; the scale is not additionally fitted.
+
+4. Sampling, diagnostics and comparison
+---------------------------------------
+The existing GG model retains its unbounded Reference/Simple priors, its
+separate propriety statement and unavailable Q mean/DIC. See gg-aft-theory.txt.
+GG is not used to emulate the new priors or fixed-shape submodels.
+
+Other models use fixed-basis stepping-out/shrinkage slice sweeps after a
+unit-Jacobian quantile-intercept translation. An initial lognormal/least-
+squares approximation and numerical optimization determine fixed geometry,
+not the posterior. For nonsmooth Laplace targets, a positive design-based
+fallback is permitted when a numerical Hessian is unsuitable. It changes
+only the proposal basis. Covariate-column scaling is a constant-Jacobian
+change and is reversed in all saved coefficients and predictions.
+
+Exceptions with exact simulation: complete lognormal regression uses
+sigma^2 ~ inverse-Gamma((n+a-p-1)/2,RSS/2), followed by its conditional
+normal beta. Intercept-only exponential/Rayleigh with right censoring and
+complete intercept-only known-shape gamma use transformed gamma draws.
+
+WAIC/LOO use the observed original-time likelihood. Each LOO deletion must
+pass the model-specific certificate under the SAME prior (including p and
+fixed df/shape). Failure does not trigger a silent prior change or refit.
+DIC is provided only when all required parameter means are certified and
+the numerical deviance calculations succeed. Its usual additional finite-
+deviance assumption and parameterization dependence remain documented.
+
+Rank-normalized R-hat/ESS concern Monte Carlo mixing, not posterior propriety.
+Quantile MCSE concerns precision, not existence of a parameter mean. An
+apparently stable finite simulation cannot resolve an improper posterior.
+
+References
+----------
+Fernandez and Steel (1999), Reference priors for the general location-scale
+model, Statistics & Probability Letters 43:377-384,
+doi:10.1016/S0167-7152(98)00276-4.
+Fernandez and Steel (2000), Bayesian regression analysis with scale mixtures
+of normals, Econometric Theory 16:80-101, doi:10.1017/S0266466600161043.
+Neal (2003), Slice sampling, Annals of Statistics 31:705-767,
+doi:10.1214/aos/1056562461.
+Prentice (1974), A log gamma model and its maximum likelihood estimation,
+Biometrika 61:539-544, doi:10.1093/biomet/61.3.539.

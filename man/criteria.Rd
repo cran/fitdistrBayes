@@ -26,7 +26,7 @@ compare_models(..., criterion = "looic", cores = 1L)
 \method{print}{fitdistrBayes_comparison}(x, digits = 4L, ...)
 }
 \arguments{
-  \item{object}{A fitted \code{fitdistrBayes} or \code{fitcensBayes} object
+  \item{object}{A fitted \code{fitdistrBayes}, \code{fitcensBayes}, or \code{fitAFTBayes} object
   retaining its log-likelihood callback (\code{store_callables = TRUE}, the default).}
   \item{methods}{Character vector selecting \code{"waic"}, \code{"looic"},
   and/or \code{"dic"}. Names ignore case; \code{"loo"} aliases \code{"looic"}.}
@@ -96,6 +96,23 @@ shape. Their indices are stored in \code{loo_zero_information_observations}
 and in an attribute of the extended \code{psis_loo} result. This exception
 does not apply to discrete censoring at zero.
 
+More generally, normalized importance ratios can be constant at floating-point
+precision even when their original log-likelihood values differ. This can
+occur for positive, very early censoring. These rows are not rounded to zero
+or discarded. Relative efficiencies for nonconstant log values use a stable
+affine transformation based on \code{expm1}; autocorrelation is invariant to
+that transformation. The pointwise LOO contribution is evaluated with stable
+log-mean-exponential arithmetic, without fitting a Pareto tail to degenerate
+weights. The penalty uses the population-variance limit; higher terms are
+below floating-point precision in this branch. The Monte Carlo error uses
+the corresponding delta-method limit with the chain-aware effective size.
+Pareto-k is \code{-Inf} as a sentinel, not an estimated tail shape.
+The indices are recorded separately in \code{loo_flat_weight_observations},
+\code{loo_constant_loglik_observations}, and
+\code{loo_numerically_flat_observations}. Ordinary informative rows retain
+the usual PSIS calculation and diagnostic thresholds. The full observation
+order is preserved, including when every contribution has constant weights.
+
 With improper objective priors, a proper full-data posterior does not imply
 proper leave-one-out training posteriors. The registered sufficient conditions
 are checked for every training set before PSIS-LOO. Under censoring these are
@@ -144,7 +161,7 @@ class \code{"fitdistrBayes_criteria"}, with:
   \item{\code{details}}{Pointwise WAIC components (unrepresentable components
   are \code{NA}, with observation indices in
   \code{waic$unrepresentable_observations}); the native \code{psis_loo}
-  result (extended with analytic zero-information rows when necessary),
+  result (extended with constant-weight rows when necessary),
   relative efficiencies and Pareto diagnostics; and DIC components
   with the posterior-mean parameter vector, as applicable.}
   \item{\code{diagnostics}}{Sampling diagnostics, per-observation LOO

@@ -1,0 +1,94 @@
+Generalized gamma AFT: specification and scope of the implementation
+===================================================================
+
+Model: log(T_i) = x_i' beta + sigma W_i, sigma > 0, Q real.
+Q=0: W standard normal. Otherwise a=1/Q^2, G~Gamma(a,rate=1),
+W=(log(G)-log(a))/Q. Original-time event densities include the 1/T
+Jacobian. Right censoring contributes S(T|x). Censoring must be independent
+and non-informative conditional on covariates. Zero censoring contributes 1.
+
+Reference prior, flat in beta:
+pi_R(beta,sigma,Q) proportional to omega(Q)/sigma.
+s=Q^2; u=trigamma(1+1/s);
+omega(Q)=abs(Q)^(-3)*sqrt((s^2*(u-1)+u^2)/(s+u)); omega(0)=1/sqrt(24).
+This is the complete-data reference construction applied to the censored
+likelihood, not a claim about the reference prior of each censoring design.
+Its ordering treats Q before sigma and the regression coefficients.
+The joint Jeffreys posterior is improper and is never sampled.
+
+Sufficient data conditions used in this release (an intercept is required):
+1. Failure count m exceeds p, the number of regression coefficients.
+2. The failure design has full column rank p.
+3. Log failure times are not exactly interpolated by that design.
+The mathematical theorem assumes exact rank/noninterpolation. The software
+uses column-normalized QR and a relative tolerance 1e-10, refusing numerically
+ambiguous cases. These are sufficient conditions, not a classification of
+all possible samples. Unsupported samples are reported as not certified.
+
+Simple prior: 1/[sigma*(1+Q^2)]. Because omega is positive and continuous,
+finite at zero and asymptotic to a positive constant times abs(Q)^(-2),
+the ratio [1/(1+Q^2)]/omega(Q) is bounded above and bounded away from zero.
+Thus reference propriety transfers to Simple, as does divergence of E|Q|.
+Under reference/simple E|Q| diverges; a finite-chain mean of Q is not a
+posterior expectation. Other uncertified moments are marked unknown.
+
+Both joint priors are improper and fixed, with no user-specified prior
+hyperparameters. Predictive lifetime means are not certified; bounded
+survival probabilities are supported.
+
+Sampling coordinates:
+zeta=asinh(Q), rho=log(sigma), logtau=rho+logcosh(zeta).
+The (rho,zeta)->(logtau,zeta) transformation has determinant one.
+The physical Jacobian is sigma*cosh(zeta), which cancels the 1/sigma
+factor under reference/simple. The remaining cosh(zeta) factor is included
+in the transformed posterior target.
+
+Version 0.7.1 additionally centers the intercept at a log-time quantile:
+c=max(.05,min(.5,r/(2*n))), where r is the observed failure count;
+h(Q)=w_c(Q)/sqrt(1+Q^2), m=beta0+tau*h(Q).
+The sampling vector is (m, beta_slopes, logtau, zeta).
+For fixed logtau and zeta, d(beta0)/dm=1, so this extra transformation
+has determinant one. Target evaluation first recovers beta0=m-tau*h(Q)
+and uses the unchanged log posterior and original sigma*cosh(zeta)
+Jacobian. Returned draws use the identical inverse. Therefore even the
+stable numerical approximation of h changes only coordinates, not the
+posterior. The centering probability is not a prior hyperparameter.
+
+For Q near zero, a second-order quantile expansion avoids cancellation.
+For very large |Q|, the log gamma-quantile expansion avoids underflow:
+h(Q) tends to log(c) as Q->+Inf, and to -log(1-c) as Q->-Inf.
+No artificial bounds on beta, sigma, Q, or posterior draws are imposed.
+
+Four chains by default use Neal's stepping-out/shrinkage slice updates.
+At each sweep a state-independent 50:50 draw chooses either the Cholesky
+basis of the mode covariance or the diagonal basis of its marginal scales.
+All coordinates are updated once in random order. Each line update leaves
+the target invariant; random compositions and mixtures do as well. Both
+bases remain fixed throughout warmup and retained sampling. The existing
+univariate slice kernel randomly allocates the finite stepping-out budget
+between both sides, as required for reversibility. Shrinkage exhaustion
+raises an error rather than returning an invalid point or clipping.
+Optimization and the Hessian serve only computational preconditioning,
+never a Wald posterior approximation. The optional slice controls affect
+efficiency, not the prior or posterior target.
+
+Discard warmup and inspect rank-normalized split R-hat and bulk/tail ESS.
+Targets can still fail with weak identification or insufficient computation.
+Proper posterior, optimizer convergence, and successful Monte Carlo mixing
+are distinct properties. A sweep updates all p+2 coordinates, so iteration
+counts alone cannot compare cost with the 0.7.0 Metropolis sampler.
+
+Slice reference: Neal (2003), The Annals of Statistics 31:705-767,
+doi:10.1214/aos/1056562461.
+
+Provenance:
+The model is Prentice (1974), Biometrika 61:539-544,
+doi:10.1093/biomet/61.3.539.
+The reference construction, its propriety conditions and Q-tail result
+are from the unpublished 2026 manuscript by Pedro Luiz Ramos, Gonzalo
+Bravo Palma, Fernando Antonio Moala and Dipak K. Dey,
+"Generalized Gamma Accelerated Failure Time Regression for Right-Censored
+Survival Data: An Objective Bayesian Analysis" (locally audited revision V6).
+The R kernels were independently implemented
+and checked against lognormal/Weibull limits, gamma transformations, and
+the manuscript's independently generated importance-sampling fits.

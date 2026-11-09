@@ -1,6 +1,6 @@
 # fitdistrBayes
 
-`fitdistrBayes` 0.6.0 fits common univariate distributions under registered
+`fitdistrBayes` 0.8.0 fits common univariate distributions under registered
 objective Bayesian priors through a deliberately small interface:
 
 ```r
@@ -17,12 +17,62 @@ exist, so a finite chain is not used to justify a divergent moment.
 Install the source archive supplied with this research release and load it:
 
 ```r
-install.packages("fitdistrBayes_0.6.0.tar.gz", repos = NULL,
+install.packages("fitdistrBayes_0.8.0.tar.gz", repos = NULL,
                  type = "source")
 library(fitdistrBayes)
 ```
 
-## Dhillon (new in 0.6.0)
+## Objective Bayesian AFT regression
+
+```r
+library(survival)
+fit <- fitAFTBayes(Surv(time, event) ~ age10 + group, data = dat,
+                  distr = "weibull", prior = "reference", seed = 40)
+coef(fit, type = "time_ratio")
+confint(fit, type = "time_ratio")
+predict(fit, newdata = profiles, times = c(1, 3, 5))
+```
+
+Use a numeric response for complete data. `fitAFTBayes_models()` lists nine
+families: Prentice generalized gamma (the default), Weibull, lognormal,
+log-logistic, log-Laplace, fixed-degree log-Student-t, exponential, Rayleigh,
+and gamma. Factors and interactions are supported.
+Right censoring is conditional non-informative censoring;
+left truncation, other censoring types, offsets and weights are not supported.
+The function checks sufficient failure-design conditions before fitting.
+It reports sampling diagnostics and applies model-specific propriety checks.
+
+GG offers `prior="reference"` and `prior="simple"` and rejects joint
+Jeffreys because its posterior is improper. Other families offer reference
+and joint Jeffreys, with the prior specified in each model's own parameters.
+Gamma estimates its unrestricted positive shape by default; the two shape
+factors and boundary proof are documented. A fixed `shape` is optional.
+Log-Student-t requires a fixed `df` and passes a conservative pointwise
+certificate that protects against partially interpolated/rounded samples.
+Exponential/Rayleigh fix scale, so both prior names reduce to flat beta.
+No prior hyperparameters or arbitrary shape truncation are introduced.
+
+GG uses quantile-centered slice sampling to improve exploration
+of the curved scale-shape tails under heavy censoring. Centering is a
+change of coordinates with unit intercept Jacobian; the priors and
+observed-data likelihood are unchanged. Each iteration is a full sweep.
+Inspect rank-normalized R-hat and bulk/tail ESS; numerical convergence
+is not guaranteed merely by posterior propriety.
+Complete lognormal regression and selected intercept-only models use exact
+posterior simulation. Other families use fixed-basis slice sweeps.
+
+`summary`, `coef`, `confint`, `predict`, `plot`, `log_lik`, `WAIC`, `LOOIC`,
+`DIC` and `compare_models` support the AFT class. DIC reports unavailability
+under both GG priors because the posterior absolute mean of Q diverges.
+Other families allow DIC only when the needed parameter means are certified.
+Survival summaries distinguish the predictive mean survival probability
+from the posterior median and interval of the conditional survival curve.
+
+See `help("fitAFTBayes")`, `help("fitAFTBayes-methods")`, the synthetic-data
+`inst/examples/tutorial_aft_gg.R`, `inst/examples/tutorial_aft_models.R`,
+`inst/doc/gg-aft-theory.txt`, and `inst/doc/aft-models-theory.txt`.
+
+## Dhillon (added in 0.6.0)
 
 The complete-data and censored interfaces accept `"dhillon"`, with survival
 `1/(1 + theta*t^beta)` and positive parameters `beta, theta`. The aliases

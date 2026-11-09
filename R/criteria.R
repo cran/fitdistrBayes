@@ -24,6 +24,7 @@
 # These mirror the complete-event guards in .fdb_build_builtin(), but do not
 # initialize samplers or rebuild models for each observation.
 .fdb_loo_guard <- function(object) {
+  if (inherits(object, "fitAFTBayes")) return(.aft_loo_guard(object))
   x <- object$data
   event <- if (inherits(object, "fitcensBayes")) object$status == 1L else rep(TRUE, length(x))
   model <- object$model$name
@@ -86,7 +87,7 @@
     paste0("custom:", object$model$name) else
     if (object$model$name %in% discrete) "counting" else "Lebesgue"
   list(data = as.numeric(object$data),
-       status = if (inherits(object, "fitcensBayes")) as.integer(object$status) else rep(1L, length(object$data)),
+       status = if (inherits(object, c("fitcensBayes", "fitAFTBayes"))) as.integer(object$status) else rep(1L, length(object$data)),
        omitted = as.integer(object$omitted), measure = measure)
 }
 
@@ -119,6 +120,7 @@
 # exactly zero; fitting a Pareto tail to its constant importance weights is
 # neither necessary nor meaningful.
 .fdb_zero_information <- function(object) {
+  if (inherits(object, "fitAFTBayes")) return(which(object$status == 0L & object$data == 0))
   if (!inherits(object, "fitcensBayes") || !object$model$name %in%
       c("beta", "chi-squared", "exponential", "gamma", "lognormal", "weibull",
         "frechet", "lomax", "nakagami", "exponential-logarithmic", "rician", "weighted lindley", "dhillon"))
@@ -126,17 +128,83 @@
   which(object$status == 0L & object$data == 0)
 }
 
-.fdb_loo_restore_zero <- function(result, zero, S, n) {
-  if (!length(zero)) return(result)
-  informative <- setdiff(seq_len(n), zero)
-  pw <- matrix(0, n, ncol(result$pointwise), dimnames = list(NULL, colnames(result$pointwise)))
-  pw[informative, ] <- result$pointwise
-  # -Inf is a sentinel for an exact degenerate tail, not an estimated k.
-  pw[zero, "influence_pareto_k"] <- -Inf
+.fdb_loo_efficiency <- function(ll, chain_id, independent, cores) {
+  shifted <- sweep(ll, 2L, apply(ll, 2L, max), "-")
+  likelihood <- exp(shifted)
+  constant <- apply(ll, 2L, function(x) all(x == x[1L]))
+  flat <- apply(likelihood, 2L, function(x) all(x == x[1L]))
+  r_eff <- rep(1, ncol(ll))
+  varying <- which(!constant)
+  if (!independent && length(varying)) {
+    # ESS is invariant under a nonzero affine transformation. If exp(z)
+    # rounds to one, 1-exp(z)=-expm1(z) still retains its variation. Scaling
+    # this complement avoids both cancellation and underflow in its variance.
+    for (j in which(flat & !constant)) {
+      complement <- -expm1(shifted[, j])
+      likelihood[, j] <- complement / max(complement)
+    }
+    r_eff[varying] <- loo::relative_eff(likelihood[, varying, drop = FALSE],
+      chain_id = chain_id, cores = cores)
+    retry <- varying[!is.finite(r_eff[varying]) | r_eff[varying] <= 0]
+    if (length(retry)) {
+      # Even a few distinct values close to one may be treated as constant
+      # by the ESS routine. Retry those columns using the unrounded log
+      # variation; leave successful ordinary calculations unchanged.
+      for (j in retry) {
+        complement <- -expm1(shifted[, j])
+        likelihood[, j] <- complement / max(complement)
+      }
+      r_eff[retry] <- loo::relative_eff(likelihood[, retry, drop = FALSE],
+        chain_id = chain_id, cores = cores)
+    }
+    if (any(!is.finite(r_eff) | r_eff <= 0))
+      stop("Relative effective sample size could not be estimated. Inspect chains and likelihood values.", call. = FALSE)
+  }
+  list(r_eff = r_eff, flat = unname(which(flat)), constant = unname(which(constant)))
+}
+
+.fdb_loo_flat_pointwise <- function(ll, r_eff) {
+  S <- nrow(ll)
+  out <- matrix(0, ncol(ll), 5L, dimnames = list(NULL,
+    c("elpd_loo", "mcse_elpd_loo", "p_loo", "looic", "influence_pareto_k")))
+  for (j in seq_len(ncol(ll))) {
+    x <- ll[, j]
+    # Stable harmonic-mean predictive value. In this branch all normalized
+    # importance ratios are indistinguishable from one in floating point;
+    # there is no resolvable Pareto tail to smooth. Keep the original logs.
+    low <- min(x)
+    elpd <- low - log1p(mean(expm1(low - x)))
+    sd <- .fdb_ic_sd(x)
+    # log E exp(x) + log E exp(-x) = Var(x) + O(range(x)^4).
+    # For roundoff-flat ratios the omitted terms are below floating precision.
+    penalty <- sd^2 * ((S - 1) / S)
+    out[j, ] <- c(elpd, sd / sqrt(S * r_eff[j]), penalty, -2 * elpd, -Inf)
+  }
+  out
+}
+
+.fdb_loo_restore_flat <- function(result, ll, efficiency, zero) {
+  flat <- efficiency$flat
+  if (!length(flat)) return(result)
+  S <- nrow(ll); n <- ncol(ll)
+  informative <- setdiff(seq_len(n), flat)
+  analytic <- .fdb_loo_flat_pointwise(ll[, flat, drop = FALSE], efficiency$r_eff[flat])
+  if (is.null(result)) {
+    # The documented loo structure, with no fictitious observations. This
+    # also covers a matrix consisting entirely of constant contributions.
+    result <- list(estimates = matrix(0, 3L, 2L, dimnames = list(
+      c("elpd_loo", "p_loo", "looic"), c("Estimate", "SE"))),
+      pointwise = NULL, diagnostics = list(), psis_object = NULL)
+    class(result) <- c("psis_loo", "importance_sampling_loo", "loo")
+  }
+  pw <- matrix(0, n, ncol(analytic), dimnames = list(NULL, colnames(analytic)))
+  if (length(informative)) pw[informative, ] <- result$pointwise
+  pw[flat, ] <- analytic
   result$pointwise <- pw
   for (nm in c("pareto_k", "n_eff", "r_eff")) {
-    v <- rep(switch(nm, pareto_k = -Inf, n_eff = S, r_eff = 1), n)
-    v[informative] <- result$diagnostics[[nm]]
+    v <- switch(nm, pareto_k = rep(-Inf, n), n_eff = S * efficiency$r_eff,
+                r_eff = efficiency$r_eff)
+    if (length(informative)) v[informative] <- result$diagnostics[[nm]]
     result$diagnostics[[nm]] <- v
   }
   for (nm in c("elpd_loo", "p_loo", "looic")) {
@@ -145,7 +213,9 @@
     result[[paste0("se_", nm)]] <- result$estimates[nm, "SE"]
   }
   attr(result, "dims") <- c(S, n)
-  attr(result, "zero_information_observations") <- zero
+  if (length(zero)) attr(result, "zero_information_observations") <- zero
+  attr(result, "flat_weight_observations") <- flat
+  attr(result, "numerically_flat_observations") <- setdiff(flat, efficiency$constant)
   result
 }
 
@@ -168,8 +238,8 @@
 }
 
 .fdb_compute_criteria <- function(object, methods, cores = 1L) {
-  if (!inherits(object, c("fitdistrBayes", "fitcensBayes")))
-    stop("'object' must be a fitdistrBayes or fitcensBayes fit.", call. = FALSE)
+  if (!inherits(object, c("fitdistrBayes", "fitcensBayes", "fitAFTBayes")))
+    stop("'object' must be a fitdistrBayes, fitcensBayes or fitAFTBayes fit.", call. = FALSE)
   methods <- .fdb_criteria_methods(methods)
   .fdb_criteria_preflight(methods, object$control)
   cores <- .fdb_scalar_count(cores, "cores", lower = 1L)
@@ -250,29 +320,27 @@
       details$looic <- NULL
     } else {
       zero <- .fdb_zero_information(object)
-      informative <- setdiff(seq_len(n), zero)
-      ll_loo <- ll[, informative, drop = FALSE]
-      if (isTRUE(object$diagnostics$exact_or_independent)) {
-        r_eff <- rep(1, length(informative))
-      } else {
-        likelihood <- exp(sweep(ll_loo, 2L, apply(ll_loo, 2L, max), "-"))
-        r_eff <- loo::relative_eff(likelihood, chain_id = object$draws$.chain, cores = cores)
-        constant <- apply(ll_loo, 2L, function(z) all(z == z[1L]))
-        r_eff[constant] <- 1
-        if (length(r_eff) != length(informative) || any(!is.finite(r_eff) | r_eff <= 0))
-          stop("Relative effective sample size could not be estimated. Inspect chains and likelihood values.", call. = FALSE)
+      efficiency <- .fdb_loo_efficiency(ll, object$draws$.chain,
+        isTRUE(object$diagnostics$exact_or_independent), cores)
+      informative <- setdiff(seq_len(n), efficiency$flat)
+      result <- NULL
+      if (length(informative)) {
+        result <- withCallingHandlers(loo::loo(ll[, informative, drop = FALSE],
+          r_eff = efficiency$r_eff[informative], cores = cores),
+          warning = function(w) { notes <<- unique(c(notes, conditionMessage(w))) })
+        result$diagnostics$r_eff <- efficiency$r_eff[informative]
       }
-      result <- withCallingHandlers(loo::loo(ll_loo, r_eff = r_eff, cores = cores),
-        warning = function(w) { notes <<- unique(c(notes, conditionMessage(w))) })
-      result$diagnostics$r_eff <- r_eff
-      result <- .fdb_loo_restore_zero(result, zero, S, n)
+      result <- .fdb_loo_restore_flat(result, ll, efficiency, zero)
       k <- loo::pareto_k_values(result)
       threshold <- min(0.7, 1 - 1 / log10(S))
-      bad <- setdiff(which(!is.finite(k) | k >= threshold), zero)
+      bad <- setdiff(which(!is.finite(k) | k >= threshold), efficiency$flat)
       est <- result$estimates
       details$looic <- result
       details$loo_r_eff <- result$diagnostics$r_eff
       details$loo_zero_information_observations <- zero
+      details$loo_flat_weight_observations <- efficiency$flat
+      details$loo_constant_loglik_observations <- efficiency$constant
+      details$loo_numerically_flat_observations <- setdiff(efficiency$flat, efficiency$constant)
       details$loo_pareto_threshold <- threshold
       details$loo_problematic_observations <- bad
       rows$looic <- row("looic", est["looic", "Estimate"], est["looic", "SE"],
@@ -359,7 +427,7 @@ compare_models <- function(..., criterion = "looic", cores = 1L) {
   labels[!nzchar(labels)] <- paste0("model", which(!nzchar(labels)))
   if (anyDuplicated(labels)) stop("Supply distinct model labels.", call. = FALSE)
   identity <- lapply(objects, function(z) if (inherits(z, "fitdistrBayes_criteria")) z$observation else {
-    if (!inherits(z, c("fitdistrBayes", "fitcensBayes"))) stop("Invalid comparison object.", call. = FALSE)
+    if (!inherits(z, c("fitdistrBayes", "fitcensBayes", "fitAFTBayes"))) stop("Invalid comparison object.", call. = FALSE)
     .fdb_criteria_identity(z)
   })
   if (!all(vapply(identity, identical, logical(1), identity[[1L]])))

@@ -1,3 +1,72 @@
+# fitdistrBayes 0.8.0
+
+- Fix LOO post-processing when positive early censoring produces likelihood
+  weights that round to a constant. Preserve the original log contributions,
+  estimate relative efficiency using a stable affine transformation, and
+  handle degenerate importance ratios without fitting a spurious Pareto tail.
+  Record exact-constant and numerically flat rows separately. Keep all
+  sampling code and genuine Pareto-k warning thresholds unchanged.
+- Extend fitAFTBayes() with Weibull, lognormal, log-logistic, log-Laplace,
+  fixed-degree log-Student-t, exponential, Rayleigh and gamma AFT models.
+  Gamma estimates its unrestricted shape by default; an explicitly fixed
+  shape is optional. Keep the existing GG Reference/Simple target.
+- Register reference and joint Jeffreys measures for the new families;
+  fixed-scale routes reduce to flat coefficient priors. Add sufficient
+  failure-design, Student-t block and unrestricted gamma boundary arguments,
+  moment guards and model-specific LOO checks. Do not substitute a truncated
+  shape prior or infer propriety from successful sampling.
+- Add exact simulation for complete lognormal regression and supported
+  intercept-only transformed-gamma posteriors. Other new routes use fixed-
+  basis slice sampling with a documented geometry fallback for nonsmooth
+  Laplace targets. Add fitAFTBayes_models() and a console tutorial.
+- Fix GG density underflow and loss of accuracy in small-Q survival tails.
+  Normalize design columns before squared norms and computational fitting;
+  return coefficients on the original design scale. Reject time-ratio
+  underflow rather than reporting an impossible zero acceleration factor.
+- Align design-rank and least-squares tolerances. Use QR factors rather than
+  normal equations for exact normal regression and computational geometry.
+  Keep transformed-gamma draws on the log scale when small known shapes
+  would underflow before taking their logarithm.
+- Extend prediction, summaries, pointwise likelihoods, WAIC/LOO/DIC and
+  regression tests to the new families. Existing fitdistrBayes() and
+  fitcensBayes() source implementations are unchanged.
+
+# fitdistrBayes 0.7.1
+
+- Replace the AFT Metropolis sampler with stepping-out/shrinkage slice
+  sweeps in quantile-centered scale-shape coordinates. Mix fixed full and
+  diagonal bases to avoid imposing mode correlations throughout the tails.
+- Preserve the two objective priors and observed-data likelihood exactly.
+  The intercept translation has unit Jacobian and is inverted consistently
+  for target evaluation and returned parameters. No prior hyperparameters
+  are introduced, and convergence thresholds are unchanged.
+- Record dispersed chain starts, centering probability, movement fractions
+  and target evaluation counts. Replace the experimental 0.7.0 Metropolis
+  controls with slice_width, slice_steps and max_shrink.
+- Add independent Gaussian-target, quantile-limit and Jacobian checks for
+  the sampler. Keep failures and convergence warnings visible.
+- Report approximate quantile Monte Carlo errors separately from the mixing
+  diagnostics, so a passing R-hat/ESS check does not imply precise endpoints.
+
+# fitdistrBayes 0.7.0
+
+- Add formula-based `fitAFTBayes()` for Prentice generalized gamma regression
+  with complete and independently right-censored times. Numeric responses
+  and `survival::Surv()` are supported, with factor/interaction prediction metadata.
+- Provide only fixed reference and Simple objective priors, without prior
+  hyperparameters. Both joint priors are improper.
+  Check sufficient failure-design propriety conditions before sampling and
+  reject the improper joint Jeffreys route.
+- Add multi-chain Metropolis sampling in scale-shape coordinates, rank-based
+  diagnostics, regression/time-ratio intervals and survival predictions.
+  Use fixed profiled Student-t mixture proposals for the coupled scale-shape
+  tails. Suppress nonexistent or uncertified parameter moments.
+- Integrate observed-data log likelihood, WAIC, PSIS-LOO with per-training-design
+  guards, and explicit DIC unavailability for both AFT priors. Preserve existing
+  distribution/censoring routes. Add the recommended package survival to Imports;
+  the implementation remains pure R and requires no compiler.
+- Add documentation, a synthetic-data tutorial and numerical/regression tests.
+
 # fitdistrBayes 0.6.0
 
 - Add the Dhillon (log-logistic) model to both fitting interfaces, bringing
